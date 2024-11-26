@@ -12,12 +12,13 @@ const SECRET_KEY = process.env.SECRET;
 const login = async (req, res) => {
     const { email, password } = req.body;
 
+    // Validate input
     if (!email || !password) {
-        return res.status(400).json({ message: 'Email and password are required' });
+        return res.status(400).json({ message: 'Email, password, and role are required' });
     }
 
     try {
-        // Find trainee by email
+        // Find user by email
         const user = await prismaClient.user.findUnique({
             where: { email },
         });
@@ -29,7 +30,7 @@ const login = async (req, res) => {
         // Check password
         const isPasswordValid = await bcrypt.compare(password, user.password);
         if (!isPasswordValid) {
-            return res.status(401).json({ message: 'Invalid password' });
+            return res.status(401).json({ message: 'Username or password is not correct' });
         }
 
         // Generate tokens
@@ -54,7 +55,7 @@ const login = async (req, res) => {
 
 // Submit verification form
 const submitVerificationForm = async (req, res) => {
-    const { id } = req.user; // Extract user ID from access token
+    const { id } = req.user; // Ensure req.user is populated by middleware
     const {
         fullName,
         nickname,
@@ -69,12 +70,20 @@ const submitVerificationForm = async (req, res) => {
         college,
         currentMajor,
         github,
-        skills,
+        skills: {
+            skill1 = null,
+            skill2 = null,
+            skill3 = null,
+            skill4 = null,
+            skill5 = null,
+            skill6 = null,
+            skill7 = null,
+            skill8 = null,
+        } = {},
         confident,
     } = req.body;
 
     try {
-        // Update trainee details
         const updatedUser = await prismaClient.user.update({
             where: { id },
             data: {
@@ -91,21 +100,23 @@ const submitVerificationForm = async (req, res) => {
                 college,
                 currentMajor,
                 github,
-                skill1: skills.skill1,
-                skill2: skills.skill2,
-                skill3: skills.skill3,
-                skill4: skills.skill4,
-                skill5: skills.skill5,
-                skill6: skills.skill6,
-                skill7: skills.skill7,
-                skill8: skills.skill8,
+                skill1,
+                skill2,
+                skill3,
+                skill4,
+                skill5,
+                skill6,
+                skill7,
+                skill8,
                 confident,
+                status: 'Verified',
             },
         });
 
         return res.status(200).json({ message: 'Verification form submitted', user: updatedUser });
     } catch (error) {
-        return res.status(500).json({ message: 'Error submitting verification form', error });
+        console.error('Error updating trainee details:', error);
+        return res.status(500).json({ message: 'Error submitting verification form', error: error.message });
     }
 };
 

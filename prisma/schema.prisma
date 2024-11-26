@@ -59,3 +59,8 @@ model Token {
   user   User   @relation(fields: [userId], references: [id])
   userId String
 }
+
+model Courses {
+  id String @id @default(uuid())
+    
+}
