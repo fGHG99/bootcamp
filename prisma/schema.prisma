@@ -50,9 +50,11 @@ model User {
   refreshToken   String
   status         String @db.VarChar(10)
   role           String @db.VarChar(10)
-  batch                                 //relation with batchNum on batch table
-  mentor                                //relation with batchNum fields on batch table, can be null only user with role MENTOR that can insert this
+  batch        Batch?    @relation("BatchParticipants", fields: [batchId], references: [id])
+  batchId      String?
+  mentor       Batch[]   @relation("BatchMentor")
 }
+
 
 model Token {
   id     String @id @default(uuid())
@@ -62,30 +64,35 @@ model Token {
 }
 
 model Batch {
-  id         String @id @default(uuid())
-  batchNum   Int @unique
-  batchClass String @db.VarChar(50)
-  mentor     Int                             //relation with asigned Mentor fields on user table
-  startDate  DateTime
-  endDate    DateTime
-  participants  Int                          //relation with total participant for the batch
-  status     String @db.VarChar(10)       //upcoming or ended or ongoing
-  challenges Int                          //relation with total challenge that are on the batch
+  id           String    @id @default(uuid())
+  batchNum     Int       @unique
+  batchClass   String    @db.VarChar(50)
+  mentor       User?     @relation("BatchMentor", fields: [mentorId], references: [id])
+  mentorId     String?
+  startDate    DateTime
+  endDate      DateTime
+  participants User[]    @relation("BatchParticipants")
+  status       String    @db.VarChar(10)
+  challenges   Challenge[]
+  classes      Class[]   @relation("BatchClasses") // Added relation to Class
 }
 
 model Class {
-  id String @id @default(uuid())
-  className String @db.Text
-  createdAt DateTime
-  participant Int 
-  batch //relation with batch table batchNum one to many
-
+  id          String      @id @default(uuid())
+  className   String      @db.Text
+  createdAt   DateTime
+  participant Int
+  batch       Batch       @relation("BatchClasses", fields: [batchId], references: [id]) // Added opposite relation to Batch
+  batchId     String
+  challenges  Challenge[]
 }
 
 model Challenge {
-  id String @id @default(uuid())
+  id        String @id @default(uuid())
   createdAt DateTime
-  batch //relation with batch one to many
-  class //relation with class table one to many
+  batch     Batch  @relation(fields: [batchId], references: [id])
+  batchId   String
+  class     Class  @relation(fields: [classId], references: [id])
+  classId   String
 }
 
