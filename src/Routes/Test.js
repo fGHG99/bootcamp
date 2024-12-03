@@ -1,7 +1,5 @@
 const express = require('express');
-const verifyRole = require('../Middlewares/VerifyRole');
-const verifyStatus = require('../Middlewares/VerifyStatus');
-const { protect } = require('../Middlewares/Auth');
+const { protect, verifyRoles, verifyStatus } = require('../Middlewares/Auth');
 
 const router = express.Router();
 
@@ -11,7 +9,7 @@ router.get('/status-test', verifyStatus, (req, res) => {
 });
 
 // Route for testing verifyRole middleware for Admin
-router.get('/role-test', verifyRole('ADMIN'), (req, res) => {
+router.get('/role-test', verifyRoles('ADMIN'), (req, res) => {
     res.status(200).json({ message: 'User has admin privileges!', user: req.user });
 });
 
@@ -20,7 +18,7 @@ router.get('/protected', protect, (req, res) => {
 });
 
 // Route for testing both middlewares together
-router.get('/combined-test', verifyRole('TRAINEE'), verifyStatus, (req, res) => {
+router.get('/combined-test', verifyRoles('TRAINEE'), verifyStatus, (req, res) => {
     res.status(200).json({
         message: 'User is a verified trainee!',
         user: req.user,

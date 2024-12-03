@@ -50,7 +50,8 @@ model User {
   refreshToken   String
   status         String @db.VarChar(10)
   role           String @db.VarChar(10)
-    
+  batch                                 //relation with batchNum on batch table
+  mentor                                //relation with batchNum fields on batch table, can be null only user with role MENTOR that can insert this
 }
 
 model Token {
@@ -60,7 +61,31 @@ model Token {
   userId String
 }
 
-model Courses {
-  id String @id @default(uuid())
-    
+model Batch {
+  id         String @id @default(uuid())
+  batchNum   Int @unique
+  batchClass String @db.VarChar(50)
+  mentor     Int                             //relation with asigned Mentor fields on user table
+  startDate  DateTime
+  endDate    DateTime
+  participants  Int                          //relation with total participant for the batch
+  status     String @db.VarChar(10)       //upcoming or ended or ongoing
+  challenges Int                          //relation with total challenge that are on the batch
 }
+
+model Class {
+  id String @id @default(uuid())
+  className String @db.Text
+  createdAt DateTime
+  participant Int 
+  batch //relation with batch table batchNum one to many
+
+}
+
+model Challenge {
+  id String @id @default(uuid())
+  createdAt DateTime
+  batch //relation with batch one to many
+  class //relation with class table one to many
+}
+
