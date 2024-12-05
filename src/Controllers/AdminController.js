@@ -1,11 +1,14 @@
+const express = require('express');
 const prisma = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { verifyRoles } = require('../Middlewares/Auth'); 
 
 const { PrismaClient } = prisma;
 const prismaClient = new PrismaClient();
+const router = express.Router();
 
-const createUser = async (req, res) => {
+router.post('/create', async (req, res) => {
   try {
     const { email, password, role } = req.body;
 
@@ -34,7 +37,7 @@ const createUser = async (req, res) => {
     // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
 
-    // Generate refresh token first
+    // Generate refresh token
     const refreshToken = jwt.sign(
       {
         email,
@@ -83,7 +86,7 @@ const createUser = async (req, res) => {
         skill7: null,
         skill8: null,
         confident: null,
-        refreshToken: refreshToken,// Store the refresh token in the database
+        refreshToken: refreshToken, // Store the refresh token in the database
       },
       select: {
         id: true,
@@ -105,7 +108,63 @@ const createUser = async (req, res) => {
     console.error('Error creating user:', error);
     res.status(500).json({ message: 'An error occurred while creating the user.' });
   }
-};
+});
 
- 
-module.exports = { createUser };
+router.post('/class', verifyRoles(['ADMIN']), async (req, res) => {
+  try {
+    const { className, batchId, participant } = req.body;
+
+    const classData = await prisma.class.create({
+      data: {
+        className,
+        participant,
+        batchId,
+        createdAt: new Date(),
+      },
+    });
+    res.status(201).json(classData);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/batch', verifyRoles(['ADMIN']), async (req, res) => {
+  try {
+    const { batchNum, batchClass, mentorId, startDate, endDate, status } = req.body;
+
+    const batch = await prisma.batch.create({
+      data: {
+        batchNum,
+        batchClass,
+        mentorId,
+        startDate: new Date(startDate),
+        endDate: new Date(endDate),
+        status,
+      },
+    });
+    res.status(201).json(batch);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.post('/challenge', verifyRoles(['ADMIN']), async (req, res) => {
+  try {
+    const { batchId, classId } = req.body;
+
+    const challenge = await prisma.challenge.create({
+      data: {
+        batchId,
+        classId,
+        createdAt: new Date(),
+      },
+    });
+    res.status(201).json(challenge);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
+
+
+module.exports = router;

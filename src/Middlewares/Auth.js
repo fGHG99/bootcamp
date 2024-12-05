@@ -96,7 +96,7 @@
             }
 
             // Check user verification status
-            if (user.status === 'Unverified') {
+            if (user.userstatus === 'UNVERIFIED') {
                 return res.status(403).json({ message: 'Forbidden: User is not verified' });
             }
 

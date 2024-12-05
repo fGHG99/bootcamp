@@ -1,6 +1,6 @@
 const express = require('express');
-const adminRoutes = require('./Routes/AdminRoute');
-const traineeRoutes = require('./Routes/TraineeRoute');
+const adminRoutes = require('./Controllers/AdminController');
+const traineeRoutes = require('./Controllers/TraineeController');
 const Test = require('./Routes/Test');
 const MentorNote = require('./Controllers/MentorController');
 
