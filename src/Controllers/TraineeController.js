@@ -155,7 +155,7 @@ const submitVerificationForm = async (req, res) => {
                 skill7,
                 skill8,
                 confident,
-                status: 'Verified',
+                userstatus: 'VERIFIED',
             },
         });
 

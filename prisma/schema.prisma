@@ -1,98 +1,126 @@
-// This is your Prisma schema file,
-// learn more about it in the docs: https://pris.ly/d/prisma-schema
+  // This is your Prisma schema file,
+  // learn more about it in the docs: https://pris.ly/d/prisma-schema
 
-// Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-// Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
+  // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
+  // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
-generator client {
-  provider = "prisma-client-js"
-}
+  generator client {
+    provider = "prisma-client-js"
+  }
 
-datasource db {
-  provider = "postgresql"
-  url      = env("DATABASE_URL")
-}
+  datasource db {
+    provider = "postgresql"
+    url      = env("DATABASE_URL")
+  }
 
-enum Role { 
-  TRAINEE
-  MENTOR
-  EXAMINER
-  ADMIN
-}
+  enum Role { 
+    TRAINEE
+    MENTOR
+    EXAMINER
+    ADMIN
+  }
 
-model User { 
-  id             String   @id @default(uuid())
-  fullName       String?   @db.VarChar(50)
-  nickname       String?
-  pob            String?   @db.VarChar(30)
-  dob            DateTime? 
-  address        String?   
-  mobile         String?   @db.VarChar(15)
-  lastEdu        String?
-  lastEduInst    String?
-  major          String?
-  inCollege      Boolean?
-  college        String?
-  currentMajor   String?
-  github         String?
-  skill1         Int?      
-  skill2         Int?      
-  skill3         Int?      
-  skill4         Int?    
-  skill5         Int?   
-  skill6         Int?    
-  skill7         Int?      
-  skill8         Int?      
-  confident      String?   @db.VarChar(300)
-  email          String   @unique
-  password       String
-  Token          Token[]
-  refreshToken   String
-  status         String @db.VarChar(10)
-  role           String @db.VarChar(10)
-  batch        Batch?    @relation("BatchParticipants", fields: [batchId], references: [id])
-  batchId      String?
-  mentor       Batch[]   @relation("BatchMentor")
-}
+  enum Status {
+    Ongoing
+    Completed
+    Tba
+  }
+
+  enum UserStatus {
+    UNVERIFIED
+    VERIFIED
+  }
+
+  enum Visibility {
+    FOR_GRADER
+    FOR_TRAINEE
+  }
+
+  model User { 
+    id             String   @id @default(uuid())
+    fullName       String?   @db.VarChar(50)
+    nickname       String?
+    pob            String?   @db.VarChar(30)
+    dob            DateTime? 
+    address        String?   
+    mobile         String?   @db.VarChar(15)
+    lastEdu        String?
+    lastEduInst    String?
+    major          String?
+    inCollege      Boolean?
+    college        String?
+    currentMajor   String?
+    github         String?
+    skill1         Int?      
+    skill2         Int?      
+    skill3         Int?      
+    skill4         Int?    
+    skill5         Int?   
+    skill6         Int?    
+    skill7         Int?      
+    skill8         Int?      
+    confident      String?   @db.VarChar(300)
+    email          String   @unique
+    password       String
+    Token          Token[]
+    refreshToken   String
+    role           Role
+    userstatus         UserStatus
+    batch        Batch?    @relation("BatchParticipants", fields: [batchId], references: [id], onDelete: Cascade)
+    batchId      String?
+    mentor       Batch[]   @relation("BatchMentor")
+    notes         Note[]   @relation("GraderNotes")
+    receivedNotes Note[]   @relation("TraineeNotes")
+  }
 
 
-model Token {
-  id     String @id @default(uuid())
-  token  String @db.Text
-  user   User   @relation(fields: [userId], references: [id])
-  userId String
-}
+  model Token {
+    id     String @id @default(uuid())
+    token  String @db.Text
+    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+    userId String
+  }
 
-model Batch {
-  id           String    @id @default(uuid())
-  batchNum     Int       @unique
-  batchClass   String    @db.VarChar(50)
-  mentor       User?     @relation("BatchMentor", fields: [mentorId], references: [id])
-  mentorId     String?
-  startDate    DateTime
-  endDate      DateTime
-  participants User[]    @relation("BatchParticipants")
-  status       String    @db.VarChar(10)
-  challenges   Challenge[]
-  classes      Class[]   @relation("BatchClasses") // Added relation to Class
-}
+  model Batch {
+    id           String    @id @default(uuid())
+    batchNum     Int       @unique
+    batchClass   String    @db.VarChar(50)
+    mentor       User?     @relation("BatchMentor", fields: [mentorId], references: [id])
+    mentorId     String?
+    startDate    DateTime
+    endDate      DateTime
+    participants User[]    @relation("BatchParticipants")
+    status       Status
+    challenges   Challenge[]
+    classes      Class[]   @relation("BatchClasses") // Added relation to Class
+  }
 
-model Class {
+  model Class {
+    id          String      @id @default(uuid())
+    className   String      @db.Text
+    createdAt   DateTime
+    participant Int
+    batch       Batch       @relation("BatchClasses", fields: [batchId], references: [id]) // Added opposite relation to Batch
+    batchId     String
+    challenges  Challenge[]
+  }
+
+  model Challenge {
+    id        String @id @default(uuid())
+    createdAt DateTime
+    batch     Batch  @relation(fields: [batchId], references: [id])
+    batchId   String
+    class     Class  @relation(fields: [classId], references: [id])
+    classId   String
+  }
+
+  model Note {
   id          String      @id @default(uuid())
-  className   String      @db.Text
-  createdAt   DateTime
-  participant Int
-  batch       Batch       @relation("BatchClasses", fields: [batchId], references: [id]) // Added opposite relation to Batch
-  batchId     String
-  challenges  Challenge[]
-}
-
-model Challenge {
-  id        String @id @default(uuid())
-  createdAt DateTime
-  batch     Batch  @relation(fields: [batchId], references: [id])
-  batchId   String
-  class     Class  @relation(fields: [classId], references: [id])
-  classId   String
-}
-
+  content     String      @db.VarChar(300)
+  visibility  Visibility
+  graderId    String
+  grader      User        @relation("GraderNotes", fields: [graderId], references: [id])
+  traineeId   String
+  trainee     User        @relation("TraineeNotes", fields: [traineeId], references: [id])
+  createdAt   DateTime    @default(now())
+  }

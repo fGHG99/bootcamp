@@ -60,7 +60,7 @@ const createUser = async (req, res) => {
         email,
         password: hashedPassword,
         role,
-        status: 'Unverified',
+        userstatus: 'UNVERIFIED',
         fullName: null,
         nickname: null,
         pob: null,
@@ -83,13 +83,13 @@ const createUser = async (req, res) => {
         skill7: null,
         skill8: null,
         confident: null,
-        refreshToken: refreshToken, // Store the refresh token in the database
+        refreshToken: refreshToken,// Store the refresh token in the database
       },
       select: {
         id: true,
         email: true,
         role: true,
-        status: true,
+        userstatus: true,
       },
     });
 
@@ -107,4 +107,5 @@ const createUser = async (req, res) => {
   }
 };
 
+ 
 module.exports = { createUser };
