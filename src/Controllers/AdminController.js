@@ -2,13 +2,17 @@ const express = require('express');
 const prisma = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
+const { uploadFileToS3 } = require('../services/s3Service ');
+const upload = require('../Middlewares/ValidateFIle');
+const fs = require('fs');
 const { verifyRoles } = require('../Middlewares/Auth'); 
+
 
 const { PrismaClient } = prisma;
 const prismaClient = new PrismaClient();
 const router = express.Router();
 
-router.post('/create', async (req, res) => {
+router.post('/createuser', async (req, res) => {
   try {
     const { email, password, role } = req.body;
 
@@ -162,6 +166,110 @@ router.post('/challenge', verifyRoles(['ADMIN']), async (req, res) => {
     res.status(201).json(challenge);
   } catch (error) {
     res.status(500).json({ error: error.message });
+  }
+});
+
+// Create a new lesson
+router.post('/createlesson', async (req, res) => {
+  try {
+    const { title, description, deadline, batchId, classId } = req.body;
+
+    const lesson = await prisma.lesson.create({
+      data: {
+        title,
+        description,
+        deadline: new Date(deadline),
+        batchId,
+        classId,
+      },
+    });
+
+    res.status(201).json({ message: 'Lesson created successfully', lesson });
+  } catch (error) {
+    res.status(500).json({ message: 'Error creating lesson', error });
+  }
+});
+
+// Upload a file to a lesson
+router.post('/:lessonId/upload', upload.single('file'), async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+
+    // Check if lesson exists
+    const lesson = await prisma.lesson.findUnique({ where: { id: lessonId } });
+    if (!lesson) return res.status(404).json({ message: 'Lesson not found' });
+
+    // Check file limit
+    const fileCount = await prisma.file.count({ where: { lessonId } });
+    if (fileCount >= 3) return res.status(400).json({ message: 'File limit reached' });
+
+    const file = req.file;
+    const s3Url = await uploadFileToS3(file.path, file.originalname, file.mimetype);
+
+    // Save file metadata
+    const fileMetadata = await prisma.file.create({
+      data: {
+        name: file.originalname,
+        type: file.mimetype,
+        size: file.size,
+        driveId: s3Url, // S3 URL stored as the file identifier
+        lessonId,
+      },
+    });
+
+    // Remove temp file
+    fs.unlinkSync(file.path);
+
+    res.status(201).json({ message: 'File uploaded successfully', fileMetadata });
+  } catch (error) {
+    res.status(500).json({ message: 'Error uploading file', error });
+  }
+});
+
+// Get a lesson's details
+router.get('/:lessonId', async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: lessonId },
+      include: { files: true },
+    });
+
+    if (!lesson) return res.status(404).json({ message: 'Lesson not found' });
+
+    res.status(200).json({ lesson });
+  } catch (error) {
+    res.status(500).json({ message: 'Error fetching lesson', error });
+  }
+});
+
+// Update a lesson
+router.post('/:lessonId/update', async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+    const { title, description, deadline } = req.body;
+
+    const lesson = await prisma.lesson.update({
+      where: { id: lessonId },
+      data: { title, description, deadline: new Date(deadline) },
+    });
+
+    res.status(200).json({ message: 'Lesson updated successfully', lesson });
+  } catch (error) {
+    res.status(500).json({ message: 'Error updating lesson', error });
+  }
+});
+
+// Delete a lesson
+router.delete('/:lessonId/delete', async (req, res) => {
+  try {
+    const { lessonId } = req.params;
+
+    await prisma.lesson.delete({ where: { id: lessonId } });
+    res.status(200).json({ message: 'Lesson deleted successfully' });
+  } catch (error) {
+    res.status(500).json({ message: 'Error deleting lesson', error });
   }
 });
 

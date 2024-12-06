@@ -5,116 +5,122 @@
   // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
 
   generator client {
-    provider = "prisma-client-js"
-  }
+  provider = "prisma-client-js"
+}
 
-  datasource db {
-    provider = "postgresql"
-    url      = env("DATABASE_URL")
-  }
+datasource db {
+  provider = "postgresql"
+  url      = env("DATABASE_URL")
+}
 
-  enum Role { 
-    TRAINEE
-    MENTOR
-    EXAMINER
-    ADMIN
-  }
+enum Role { 
+  TRAINEE
+  MENTOR
+  EXAMINER
+  ADMIN
+}
 
-  enum Status {
-    Ongoing
-    Completed
-    Tba
-  }
+enum Status {
+  Ongoing
+  Completed
+  Tba
+}
 
-  enum UserStatus {
-    UNVERIFIED
-    VERIFIED
-  }
+enum UserStatus {
+  UNVERIFIED
+  VERIFIED
+}
 
-  enum Visibility {
-    FOR_GRADER
-    FOR_TRAINEE
-  }
+enum Visibility {
+  FOR_GRADER
+  FOR_TRAINEE
+}
 
-  model User { 
-    id             String   @id @default(uuid())
-    fullName       String?   @db.VarChar(50)
-    nickname       String?
-    pob            String?   @db.VarChar(30)
-    dob            DateTime? 
-    address        String?   
-    mobile         String?   @db.VarChar(15)
-    lastEdu        String?
-    lastEduInst    String?
-    major          String?
-    inCollege      Boolean?
-    college        String?
-    currentMajor   String?
-    github         String?
-    skill1         Int?      
-    skill2         Int?      
-    skill3         Int?      
-    skill4         Int?    
-    skill5         Int?   
-    skill6         Int?    
-    skill7         Int?      
-    skill8         Int?      
-    confident      String?   @db.VarChar(300)
-    email          String   @unique
-    password       String
-    Token          Token[]
-    refreshToken   String
-    role           Role
-    userstatus         UserStatus
-    batch        Batch?    @relation("BatchParticipants", fields: [batchId], references: [id], onDelete: Cascade)
-    batchId      String?
-    mentor       Batch[]   @relation("BatchMentor")
-    notes         Note[]   @relation("GraderNotes")
-    receivedNotes Note[]   @relation("TraineeNotes")
-  }
+enum LessonStatus {
+  NOT_DEADLINE
+  DEADLINE
+}
 
+model User { 
+  id             String   @id @default(uuid())
+  fullName       String?   @db.VarChar(50)
+  nickname       String?
+  pob            String?   @db.VarChar(30)
+  dob            DateTime? 
+  address        String?   
+  mobile         String?   @db.VarChar(15)
+  lastEdu        String?
+  lastEduInst    String?
+  major          String?
+  inCollege      Boolean?
+  college        String?
+  currentMajor   String?
+  github         String?
+  skill1         Int?      
+  skill2         Int?      
+  skill3         Int?      
+  skill4         Int?    
+  skill5         Int?   
+  skill6         Int?    
+  skill7         Int?      
+  skill8         Int?      
+  confident      String?   @db.VarChar(300)
+  email          String   @unique
+  password       String
+  Token          Token[]
+  refreshToken   String
+  role           Role
+  userstatus     UserStatus
+  batch          Batch?    @relation("BatchParticipants", fields: [batchId], references: [id], onDelete: Cascade)
+  batchId        String?
+  mentor         Batch[]   @relation("BatchMentor")
+  notes          Note[]    @relation("GraderNotes")
+  receivedNotes  Note[]    @relation("TraineeNotes")
+}
 
-  model Token {
-    id     String @id @default(uuid())
-    token  String @db.Text
-    user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
-    userId String
-  }
+model Token {
+  id     String @id @default(uuid())
+  token  String @db.Text
+  user   User   @relation(fields: [userId], references: [id], onDelete: Cascade)
+  userId String
+}
 
-  model Batch {
-    id           String    @id @default(uuid())
-    batchNum     Int       @unique
-    batchClass   String    @db.VarChar(50)
-    mentor       User?     @relation("BatchMentor", fields: [mentorId], references: [id])
-    mentorId     String?
-    startDate    DateTime
-    endDate      DateTime
-    participants User[]    @relation("BatchParticipants")
-    status       Status
-    challenges   Challenge[]
-    classes      Class[]   @relation("BatchClasses") // Added relation to Class
-  }
+model Batch {
+  id           String    @id @default(uuid())
+  batchNum     Int       @unique
+  batchClass   String    @db.VarChar(50)
+  mentor       User?     @relation("BatchMentor", fields: [mentorId], references: [id])
+  mentorId     String?
+  startDate    DateTime
+  endDate      DateTime
+  participants User[]    @relation("BatchParticipants")
+  status       Status
+  challenges   Challenge[]
+  classes      Class[]   @relation("BatchClasses")
+  lessons      Lesson[]  @relation("BatchLessons") // Opposite relation to Lesson
+}
 
-  model Class {
-    id          String      @id @default(uuid())
-    className   String      @db.Text
-    createdAt   DateTime
-    participant Int
-    batch       Batch       @relation("BatchClasses", fields: [batchId], references: [id]) // Added opposite relation to Batch
-    batchId     String
-    challenges  Challenge[]
-  }
+model Class {
+  id          String      @id @default(uuid())
+  className   String      @db.Text
+  createdAt   DateTime
+  participant Int
+  batch       Batch       @relation("BatchClasses", fields: [batchId], references: [id])
+  batchId     String
+  challenges  Challenge[]
+  lessons     Lesson[]    @relation("ClassLessons") // Opposite relation to Lesson
+}
 
-  model Challenge {
-    id        String @id @default(uuid())
-    createdAt DateTime
-    batch     Batch  @relation(fields: [batchId], references: [id])
-    batchId   String
-    class     Class  @relation(fields: [classId], references: [id])
-    classId   String
-  }
+model Challenge {
+  id        String @id @default(uuid())
+  createdAt DateTime
+  batch     Batch  @relation(fields: [batchId], references: [id])
+  batchId   String
+  class     Class  @relation(fields: [classId], references: [id])
+  classId   String
+}
 
-  model Note {
+model Note {
   id          String      @id @default(uuid())
   content     String      @db.VarChar(300)
   visibility  Visibility
@@ -123,4 +129,29 @@
   traineeId   String
   trainee     User        @relation("TraineeNotes", fields: [traineeId], references: [id])
   createdAt   DateTime    @default(now())
-  }
+}
+
+model Lesson {
+  id          String   @id @default(uuid())
+  title       String   @db.VarChar(100) // Title of the lesson
+  description String   @db.VarChar(300) // Explanation text, max 300 characters
+  deadline    DateTime // Deadline for the lesson
+  status      LessonStatus @default(NOT_DEADLINE) // Status based on deadline
+  createdAt   DateTime @default(now())
+  files       File[]   // Relation to uploaded files
+  batchId     String
+  batch       Batch    @relation("BatchLessons", fields: [batchId], references: [id], onDelete: Cascade)
+  classId     String
+  class       Class    @relation("ClassLessons", fields: [classId], references: [id], onDelete: Cascade)
+}
+
+model File {
+  id          String   @id @default(uuid())
+  name        String   @db.VarChar(100) // Original file name
+  type        String   @db.VarChar(10)  // File type (e.g., pdf, pptx)
+  size        Int      // File size in bytes
+  driveId     String   // ID from Google Drive
+  uploadedAt  DateTime @default(now())  // Upload timestamp
+  lessonId    String
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade) // File belongs to a Lesson
+}
