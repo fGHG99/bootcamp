@@ -1,10 +1,4 @@
-  // This is your Prisma schema file,
-  // learn more about it in the docs: https://pris.ly/d/prisma-schema
-
-  // Looking for ways to speed up your queries, or scale easily with your serverless or edge functions?
-  // Try Prisma Accelerate: https://pris.ly/cli/accelerate-init
-
-  generator client {
+generator client {
   provider = "prisma-client-js"
 }
 
@@ -43,12 +37,12 @@ enum LessonStatus {
 
 model User { 
   id             String   @id @default(uuid())
-  fullName       String?   @db.VarChar(50)
+  fullName       String?  @db.VarChar(50)
   nickname       String?
-  pob            String?   @db.VarChar(30)
+  pob            String?  @db.VarChar(30)
   dob            DateTime? 
   address        String?   
-  mobile         String?   @db.VarChar(15)
+  mobile         String?  @db.VarChar(15)
   lastEdu        String?
   lastEduInst    String?
   major          String?
@@ -64,18 +58,20 @@ model User {
   skill6         Int?    
   skill7         Int?      
   skill8         Int?      
-  confident      String?   @db.VarChar(300)
+  confident      String?  @db.VarChar(300)
   email          String   @unique
   password       String
   Token          Token[]
   refreshToken   String
   role           Role
   userstatus     UserStatus
-  batch          Batch?    @relation("BatchParticipants", fields: [batchId], references: [id], onDelete: Cascade)
+  batch          Batch?   @relation("BatchParticipants", fields: [batchId], references: [id], onDelete: Cascade)
   batchId        String?
-  mentor         Batch[]   @relation("BatchMentor")
-  notes          Note[]    @relation("GraderNotes")
-  receivedNotes  Note[]    @relation("TraineeNotes")
+  mentor         Batch[]  @relation("BatchMentor")
+  notes          Note[]   @relation("GraderNotes")
+  receivedNotes  Note[]   @relation("TraineeNotes")
+  lessonCompletions LessonCompletion[]
+  certificates   Certificate[]
 }
 
 model Token {
@@ -97,7 +93,8 @@ model Batch {
   status       Status
   challenges   Challenge[]
   classes      Class[]   @relation("BatchClasses")
-  lessons      Lesson[]  @relation("BatchLessons") // Opposite relation to Lesson
+  lessons      Lesson[]  @relation("BatchLessons")
+  certificates Certificate[]
 }
 
 model Class {
@@ -108,7 +105,9 @@ model Class {
   batch       Batch       @relation("BatchClasses", fields: [batchId], references: [id])
   batchId     String
   challenges  Challenge[]
-  lessons     Lesson[]    @relation("ClassLessons") // Opposite relation to Lesson
+  lessons     Lesson[]    @relation("ClassLessons")
+  certificates Certificate[]
+  status      Status      @default(Tba)
 }
 
 model Challenge {
@@ -133,25 +132,48 @@ model Note {
 
 model Lesson {
   id          String   @id @default(uuid())
-  title       String   @db.VarChar(100) // Title of the lesson
-  description String   @db.VarChar(300) // Explanation text, max 300 characters
-  deadline    DateTime // Deadline for the lesson
-  status      LessonStatus @default(NOT_DEADLINE) // Status based on deadline
+  title       String   @db.VarChar(100)
+  description String   @db.VarChar(300)
+  deadline    DateTime
+  status      LessonStatus @default(NOT_DEADLINE)
   createdAt   DateTime @default(now())
-  files       File[]   // Relation to uploaded files
+  files       File[]   
   batchId     String
   batch       Batch    @relation("BatchLessons", fields: [batchId], references: [id], onDelete: Cascade)
   classId     String
   class       Class    @relation("ClassLessons", fields: [classId], references: [id], onDelete: Cascade)
+  completions LessonCompletion[]
 }
 
 model File {
   id          String   @id @default(uuid())
-  name        String   @db.VarChar(100) // Original file name
-  type        String   @db.VarChar(10)  // File type (e.g., pdf, pptx)
-  size        Int      // File size in bytes
-  driveId     String   // ID from Google Drive
-  uploadedAt  DateTime @default(now())  // Upload timestamp
+  name        String   @db.VarChar(100)
+  type        String   @db.VarChar(10)
+  size        Int      
+  driveId     String   
+  uploadedAt  DateTime @default(now())
   lessonId    String
-  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade) // File belongs to a Lesson
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+}
+
+model LessonCompletion {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  lessonId    String
+  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  completed   Boolean  @default(false)
+  completedAt DateTime?
+}
+
+model Certificate {
+  id        String  @id @default(uuid())
+  traineeId String
+  trainee   User    @relation(fields: [traineeId], references: [id], onDelete: Cascade)
+  classId   String
+  class     Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  batchId   String
+  batch     Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  status    String  @default("Issued")
+  issuedAt  DateTime @default(now())
 }
