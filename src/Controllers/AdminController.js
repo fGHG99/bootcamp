@@ -2,9 +2,9 @@ const express = require('express');
 const prisma = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { uploadFileToS3 } = require('../services/s3Service ');
-const upload = require('../Middlewares/ValidateFIle');
-const fs = require('fs');
+// const { uploadFileToS3 } = require('../services/s3Service');
+// const upload = require('../Middlewares/ValidateFIle');
+// const fs = require('fs');
 const { verifyRoles } = require('../Middlewares/Auth'); 
 
 
@@ -190,41 +190,6 @@ router.post('/createlesson', async (req, res) => {
   }
 });
 
-// Upload a file to a lesson
-router.post('/:lessonId/upload', upload.single('file'), async (req, res) => {
-  try {
-    const { lessonId } = req.params;
-
-    // Check if lesson exists
-    const lesson = await prisma.lesson.findUnique({ where: { id: lessonId } });
-    if (!lesson) return res.status(404).json({ message: 'Lesson not found' });
-
-    // Check file limit
-    const fileCount = await prisma.file.count({ where: { lessonId } });
-    if (fileCount >= 3) return res.status(400).json({ message: 'File limit reached' });
-
-    const file = req.file;
-    const s3Url = await uploadFileToS3(file.path, file.originalname, file.mimetype);
-
-    // Save file metadata
-    const fileMetadata = await prisma.file.create({
-      data: {
-        name: file.originalname,
-        type: file.mimetype,
-        size: file.size,
-        driveId: s3Url, // S3 URL stored as the file identifier
-        lessonId,
-      },
-    });
-
-    // Remove temp file
-    fs.unlinkSync(file.path);
-
-    res.status(201).json({ message: 'File uploaded successfully', fileMetadata });
-  } catch (error) {
-    res.status(500).json({ message: 'Error uploading file', error });
-  }
-});
 
 // Get a lesson's details
 router.get('/:lessonId', async (req, res) => {

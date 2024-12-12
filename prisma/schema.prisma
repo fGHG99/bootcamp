@@ -72,6 +72,7 @@ model User {
   receivedNotes  Note[]   @relation("TraineeNotes")
   lessonCompletions LessonCompletion[]
   certificates   Certificate[]
+  profiles       Profile[]
 }
 
 model Token {
@@ -145,17 +146,6 @@ model Lesson {
   completions LessonCompletion[]
 }
 
-model File {
-  id          String   @id @default(uuid())
-  name        String   @db.VarChar(100)
-  type        String   @db.VarChar(10)
-  size        Int      
-  driveId     String   
-  uploadedAt  DateTime @default(now())
-  lessonId    String
-  lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
-}
-
 model LessonCompletion {
   id          String   @id @default(uuid())
   userId      String
@@ -176,4 +166,24 @@ model Certificate {
   batch     Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
   status    String  @default("Issued")
   issuedAt  DateTime @default(now())
+}
+
+model File {
+  id        String   @id @default(uuid())
+  filename  String   @db.VarChar(255)
+  filepath  String   @db.Text
+  mimetype  String   @db.VarChar(100)
+  size      Int
+  lessonId  String
+  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+}
+
+model Profile {
+  id        String  @id @default(uuid())
+  type      String  @db.VarChar(50)
+  filepath  String  @db.Text
+  mimetype  String  @db.VarChar(100)
+  size      Int
+  userId    String
+  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
 }
