@@ -35,6 +35,12 @@ enum LessonStatus {
   DEADLINE
 }
 
+enum ProfileType {
+  CASUAL
+  PROFESSIONAL
+}
+
+
 model User { 
   id             String   @id @default(uuid())
   fullName       String?  @db.VarChar(50)
@@ -180,7 +186,7 @@ model File {
 
 model Profile {
   id        String  @id @default(uuid())
-  type      String  @db.VarChar(50)
+  type      ProfileType
   filepath  String  @db.Text
   mimetype  String  @db.VarChar(100)
   size      Int

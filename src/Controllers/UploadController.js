@@ -13,7 +13,80 @@ const ensureDirectoryExistence = (folderPath) => {
   }
 };
 
-// Konfigurasi Multer untuk lesson
+// Sanitasi nama file
+const sanitizeFilename = (filename) => {
+  return filename.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_.-]/g, "");
+};
+
+// Konfigurasi Multer untuk Profile
+const profileStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const { type } = req.body; // Mendapatkan tipe profil dari request body
+    if (!type || !["CASUAL", "PROFESSIONAL"].includes(type)) {
+      return cb(new Error("Invalid profile type. Must be CASUAL or PROFESSIONAL."));
+    }
+
+    const targetFolder = `public/profile/${type.toLowerCase()}`;
+    ensureDirectoryExistence(targetFolder);
+    cb(null, targetFolder);
+  },
+  filename: (req, file, cb) => {
+    const sanitizedFilename = sanitizeFilename(file.originalname);
+    cb(null, `${Date.now()}-${sanitizedFilename}`);
+  },
+});
+
+const profileUpload = multer({
+  storage: profileStorage,
+  limits: { fileSize: 10 * 1024 * 1024 }, // Maksimal 10 MB per file
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = ["image/jpeg", "image/png", "application/pdf"];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only JPEG, PNG, and PDF are allowed."));
+    }
+  },
+});
+
+// Endpoint untuk upload Profile
+router.post("/profile", profileUpload.single("file"), async (req, res) => {
+  const { type, userId } = req.body;
+  const file = req.file;
+
+  if (!type || !["CASUAL", "PROFESSIONAL"].includes(type)) {
+    return res.status(400).json({ error: "Invalid profile type. Must be CASUAL or PROFESSIONAL." });
+  }
+
+  if (!userId) {
+    return res.status(400).json({ error: "User ID is required." });
+  }
+
+  if (!file) {
+    return res.status(400).json({ error: "File is required." });
+  }
+
+  try {
+    const profile = await prisma.profile.create({
+      data: {
+        type,
+        filepath: file.path,
+        mimetype: file.mimetype,
+        size: file.size,
+        userId,
+      },
+    });
+
+    res.status(201).json({
+      message: "Profile uploaded successfully",
+      profile,
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to upload profile", details: error.message });
+  }
+});
+
+// Konfigurasi Multer untuk Lesson
 const lessonStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const targetFolder = "public/lesson";
@@ -21,17 +94,16 @@ const lessonStorage = multer.diskStorage({
     cb(null, targetFolder);
   },
   filename: (req, file, cb) => {
-    cb(null, `${Date.now()}-${file.originalname}`);
+    const sanitizedFilename = sanitizeFilename(file.originalname);
+    cb(null, `${Date.now()}-${sanitizedFilename}`);
   },
 });
 
 const lessonUpload = multer({
   storage: lessonStorage,
-  limits: {
-    fileSize: 100 * 1024 * 1024, // Maksimal 100 MB per file
-  },
+  limits: { fileSize: 100 * 1024 * 1024 }, // Maksimal 100 MB per file
   fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = ["image/jpeg", "image/png", "application/pdf", "application/msword"];
+    const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg", "application/pdf", "application/pptx"];
     if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
@@ -40,71 +112,55 @@ const lessonUpload = multer({
   },
 });
 
-// Middleware untuk menangani error multer
-router.use((err, req, res, next) => {
-  if (err instanceof multer.MulterError && err.code === "LIMIT_UNEXPECTED_FILE") {
-    return res.status(400).json({ error: "Too many files. Maximum upload limit is 3 files." });
-  }
-  if (err instanceof multer.MulterError && err.code === "LIMIT_FILE_SIZE") {
-    return res.status(400).json({ error: "File too large. Maximum size is 100MB per file." });
-  }
-  if (err) {
-    return res.status(400).json({ error: err.message });
-  }
-  next();
-});
-
-// Endpoint untuk upload lesson
+// Endpoint untuk upload Lesson
 router.post("/lesson", lessonUpload.array("files", 3), async (req, res) => {
-    const { title, description, deadline, classId, batchId } = req.body;
-    const { files } = req;
-  
-    if (!title || !description || !deadline || !classId || !batchId) {
-      return res.status(400).json({ error: "All lesson fields are required" });
-    }
-  
-    if (!files || files.length === 0) {
-      return res.status(400).json({ error: "At least one file is required" });
-    }
-  
-    try {
-      // Buat lesson baru
-      const lesson = await prisma.lesson.create({
+  const { title, description, deadline, classId, batchId } = req.body;
+  const { files } = req;
+
+  if (!title || !description || !deadline || !classId || !batchId) {
+    return res.status(400).json({ error: "All lesson fields are required" });
+  }
+
+  if (!files || files.length === 0) {
+    return res.status(400).json({ error: "At least one file is required" });
+  }
+
+  try {
+    const lesson = await prisma.lesson.create({
+      data: {
+        title,
+        description,
+        deadline: new Date(deadline),
+        classId,
+        batchId,
+      },
+    });
+
+    const uploads = files.map((file) =>
+      prisma.file.create({
         data: {
-          title,
-          description,
-          deadline: new Date(deadline), // Pastikan format deadline benar
-          classId,
-          batchId,
-        },
-      });
-  
-      // Simpan metadata file ke database
-      const uploads = files.map((file) =>
-        prisma.file.create({
-          data: {
-            filename: file.originalname,
-            filepath: file.path,
-            mimetype: file.mimetype,
-            size: file.size,
-            lesson: {
-              connect: { id: lesson.id },
-            },
+          filename: sanitizeFilename(file.originalname),
+          filepath: file.path,
+          mimetype: file.mimetype,
+          size: file.size,
+          lesson: {
+            connect: { id: lesson.id },
           },
-        })
-      );
-  
-      const results = await Promise.all(uploads);
-  
-      res.status(201).json({
-        message: "Lesson and files uploaded successfully",
-        lesson,
-        files: results,
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to create lesson and upload files", details: error.message });
-    }
-  });
+        },
+      })
+    );
+
+    const results = await Promise.all(uploads);
+
+    res.status(201).json({
+      message: "Lesson and files uploaded successfully",
+      lesson,
+      files: results,
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create lesson and upload files", details: error.message });
+  }
+});
 
 router.put("/lesson/:lessonId", lessonUpload.array("files", 3), async (req, res) => {
     const { lessonId } = req.params;
@@ -167,6 +223,6 @@ router.put("/lesson/:lessonId", lessonUpload.array("files", 3), async (req, res)
     } catch (error) {
       res.status(500).json({ error: "Failed to update lesson", details: error.message });
     }
-  });
+});
 
 module.exports = router;

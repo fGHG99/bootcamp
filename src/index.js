@@ -4,9 +4,12 @@ const traineeRoutes = require('./Controllers/TraineeController');
 const Test = require('./Routes/Test');
 const MentorNote = require('./Controllers/MentorController');
 const UploadRoute = require('./Controllers/UploadController');
+const path = require("path");
 
 const app = express();
 
+app.use("/profile", express.static(path.join(__dirname, "../public/profile")));
+app.use("/lesson", express.static(path.join(__dirname, "../public/lesson")));
 // Middleware
 app.use(express.json());
 
@@ -16,10 +19,13 @@ app.use('/trainee', traineeRoutes);
 app.use('/test', Test);
 app.use('/mentor', MentorNote);
 app.use('/uploads', UploadRoute);
-app.use("/public", express.static("public"));
+
+
 app.get('/', (req, res) => {
     res.send('Hello World');
 });
+
+console.log("Serving static files from:", path.join(__dirname, "../public/profile"));
 
 
 const PORT = process.env.PORT || 4000;
