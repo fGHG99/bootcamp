@@ -225,4 +225,60 @@ router.put("/lesson/:lessonId", lessonUpload.array("files", 3), async (req, res)
     }
 });
 
+const certificateStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    cb(null, path.join(__dirname, '../public/certificate/')); // Destination folder
+  },
+  filename: (req, file, cb) => {
+    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
+    cb(null, `${uniqueSuffix}-${file.originalname}`); // Create unique filename
+  },
+});
+
+const fileFilter = (req, file, cb) => {
+  const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png'];
+  if (allowedMimeTypes.includes(file.mimetype)) {
+    cb(null, true);
+  } else {
+    cb(new Error('Invalid file type. Only PDF, JPEG, and PNG are allowed.'), false);
+  }
+};
+
+const certificateUpload = multer({
+  certificateStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB file size limit
+  fileFilter,
+});
+
+// Controller function to handle certificate upload
+router.post('/upload-certificate', certificateUpload.single('certificate'), async (req, res) => {
+  try {
+    if (!req.file) {
+      return res.status(400).json({ message: 'No file uploaded.' });
+    }
+
+    const filePath = `/public/certificate/${req.file.filename}`;
+
+    // Save the file path to the database
+    const certificate = await prisma.certificate.create({
+      data: {
+        traineeId: req.body.traineeId,
+        classId: req.body.classId,
+        batchId: req.body.batchId,
+        status: 'Issued',
+        issuedAt: new Date(),
+        filePath,
+      },
+    });
+
+    res.status(200).json({
+      message: 'Certificate uploaded successfully!',
+      certificate,
+    });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal server error.', error: error.message });
+  }
+});
+
 module.exports = router;
