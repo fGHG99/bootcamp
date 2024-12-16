@@ -68,7 +68,7 @@ model User {
   email          String   @unique
   password       String
   Token          Token[]
-  refreshToken   String
+  refreshToken   String?
   role           Role
   userstatus     UserStatus
   batch          Batch?   @relation("BatchParticipants", fields: [batchId], references: [id], onDelete: Cascade)

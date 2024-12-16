@@ -238,6 +238,30 @@ router.delete('/:lessonId/delete', async (req, res) => {
   }
 });
 
+router.get('/mentor/:userId', async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    // Find the mentor by userId
+    const mentor = await prismaClient.user.findUnique({
+      where: { id: userId },
+      select: {
+        fullName: true,   // Fetch the name of the mentor
+        role: true,   // Fetch the role of the mentor
+      },
+    });
+
+    if (!mentor) {
+      return res.status(404).json({ message: 'Mentor not found' });
+    }
+
+    // Send the mentor details as a response
+    res.json(mentor);
+  } catch (error) {
+    console.error('Error fetching mentor details:', error);
+    res.status(500).json({ message: 'Internal server error' });
+  }
+});
 
 
 

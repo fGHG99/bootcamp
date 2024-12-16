@@ -209,7 +209,7 @@ router.post('/logout', async (req, res) => {
     if (!refreshToken) {
         return res.status(400).json({ message: 'Refresh token is required' });
     }
-
+    
     try {
         const decoded = jwt.verify(refreshToken, REFRESH_KEY);
 
