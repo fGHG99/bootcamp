@@ -2,26 +2,35 @@ const express = require("express");
 const multer = require("multer");
 const { PrismaClient } = require("@prisma/client");
 const fs = require("fs");
+const path = require("path");
 
 const router = express.Router();
 const prisma = new PrismaClient();
 
-// Utility untuk memastikan folder target ada
+// Utility to ensure directory exists
 const ensureDirectoryExistence = (folderPath) => {
   if (!fs.existsSync(folderPath)) {
     fs.mkdirSync(folderPath, { recursive: true });
   }
 };
 
-// Sanitasi nama file
+// Sanitize filename
 const sanitizeFilename = (filename) => {
   return filename.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_.-]/g, "");
 };
 
-// Konfigurasi Multer untuk Profile
+// Centralized allowed MIME types
+const allowedMimeTypes = {
+  profile: ["image/jpeg", "image/png", "application/pdf"],
+  lesson: ["image/jpeg", "image/png", "image/jpg", "application/pdf", "application/pptx"],
+  certificate: ["application/pdf", "image/jpeg", "image/png"],
+};
+
+// Configure multer storage for profile uploads
 const profileStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const { type } = req.body; // Mendapatkan tipe profil dari request body
+    const { type } = req.body;
+    console.log("Received profile type:", type); // Debugging
     if (!type || !["CASUAL", "PROFESSIONAL"].includes(type)) {
       return cb(new Error("Invalid profile type. Must be CASUAL or PROFESSIONAL."));
     }
@@ -38,10 +47,9 @@ const profileStorage = multer.diskStorage({
 
 const profileUpload = multer({
   storage: profileStorage,
-  limits: { fileSize: 10 * 1024 * 1024 }, // Maksimal 10 MB per file
+  limits: { fileSize: 10 * 1024 * 1024 }, // Maximum file size 10 MB
   fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = ["image/jpeg", "image/png", "application/pdf"];
-    if (allowedMimeTypes.includes(file.mimetype)) {
+    if (allowedMimeTypes.profile.includes(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new Error("Invalid file type. Only JPEG, PNG, and PDF are allowed."));
@@ -49,7 +57,7 @@ const profileUpload = multer({
   },
 });
 
-// Endpoint untuk upload Profile
+// Profile upload endpoint
 router.post("/profile", profileUpload.single("file"), async (req, res) => {
   const { type, userId } = req.body;
   const file = req.file;
@@ -67,6 +75,36 @@ router.post("/profile", profileUpload.single("file"), async (req, res) => {
   }
 
   try {
+    // Check if user already has a profile with the same type
+    const existingProfile = await prisma.profile.findUnique({
+      where: {
+        userId_type: {
+          userId,
+          type, // Ensuring no more than 1 profile per type
+        },
+      },
+    });
+
+    if (existingProfile) {
+      // If profile exists, update it instead of creating a new one
+      const updatedProfile = await prisma.profile.update({
+        where: {
+          id: existingProfile.id, // Use the existing profile ID
+        },
+        data: {
+          filepath: file.path,
+          mimetype: file.mimetype,
+          size: file.size,
+        },
+      });
+
+      return res.status(200).json({
+        message: `Profile of type ${type} updated successfully`,
+        profile: updatedProfile,
+      });
+    }
+
+    // If no existing profile, create a new one
     const profile = await prisma.profile.create({
       data: {
         type,
@@ -82,11 +120,11 @@ router.post("/profile", profileUpload.single("file"), async (req, res) => {
       profile,
     });
   } catch (error) {
-    res.status(500).json({ error: "Failed to upload profile", details: error.message });
+    res.status(500).json({ error: "Failed to upload or update profile", details: error.message });
   }
 });
 
-// Konfigurasi Multer untuk Lesson
+// Configure multer storage for lesson uploads
 const lessonStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const targetFolder = "public/lesson";
@@ -101,28 +139,27 @@ const lessonStorage = multer.diskStorage({
 
 const lessonUpload = multer({
   storage: lessonStorage,
-  limits: { fileSize: 100 * 1024 * 1024 }, // Maksimal 100 MB per file
+  limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
   fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg", "application/pdf", "application/pptx"];
-    if (allowedMimeTypes.includes(file.mimetype)) {
+    if (allowedMimeTypes.lesson.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Invalid file type. Only JPEG, PNG, PDF, and Word documents are allowed."));
+      cb(new Error("Invalid file type. Only JPEG, PNG, PDF, and PPTX are allowed."));
     }
   },
 });
 
-// Endpoint untuk upload Lesson
+// Lesson creation endpoint
 router.post("/lesson", lessonUpload.array("files", 3), async (req, res) => {
   const { title, description, deadline, classId, batchId } = req.body;
   const { files } = req;
 
   if (!title || !description || !deadline || !classId || !batchId) {
-    return res.status(400).json({ error: "All lesson fields are required" });
+    return res.status(400).json({ error: "All lesson fields are required." });
   }
 
   if (!files || files.length === 0) {
-    return res.status(400).json({ error: "At least one file is required" });
+    return res.status(400).json({ error: "At least one file is required." });
   }
 
   try {
@@ -153,126 +190,133 @@ router.post("/lesson", lessonUpload.array("files", 3), async (req, res) => {
     const results = await Promise.all(uploads);
 
     res.status(201).json({
-      message: "Lesson and files uploaded successfully",
+      message: "Lesson and files uploaded successfully.",
       lesson,
       files: results,
     });
   } catch (error) {
-    res.status(500).json({ error: "Failed to create lesson and upload files", details: error.message });
+    res.status(500).json({ error: "Failed to create lesson and upload files.", details: error.message });
   }
 });
 
+// Lesson update endpoint
 router.put("/lesson/:lessonId", lessonUpload.array("files", 3), async (req, res) => {
-    const { lessonId } = req.params;
-    const { title, description, deadline, classId, batchId, deleteOldFiles } = req.body;
-    const { files } = req; // File baru yang diunggah
-  
-    try {
-      // Cari lesson berdasarkan ID
-      const existingLesson = await prisma.lesson.findUnique({
-        where: { id: lessonId },
-        include: { files: true }, // Sertakan file yang terkait
-      });
-  
-      if (!existingLesson) {
-        return res.status(404).json({ error: "Lesson not found" });
-      }
-  
-      // Update data lesson
-      const updatedLesson = await prisma.lesson.update({
-        where: { id: lessonId },
-        data: {
-          title: title || existingLesson.title,
-          description: description || existingLesson.description,
-          deadline: deadline ? new Date(deadline) : existingLesson.deadline,
-          classId: classId || existingLesson.classId,
-          batchId: batchId || existingLesson.batchId,
-        },
-      });
-  
-      // Hapus file lama jika diminta
-      if (deleteOldFiles === "true" && existingLesson.files.length > 0) {
-        await prisma.file.deleteMany({
-          where: { lessonId },
-        });
-      }
-  
-      // Tambahkan file baru jika ada
-      let uploadedFiles = [];
-      if (files && files.length > 0) {
-        const uploads = files.map((file) =>
-          prisma.file.create({
-            data: {
-              filename: file.originalname,
-              filepath: file.path,
-              mimetype: file.mimetype,
-              size: file.size,
-              lesson: { connect: { id: lessonId } },
-            },
-          })
-        );
-  
-        uploadedFiles = await Promise.all(uploads);
-      }
-  
-      res.status(200).json({
-        message: "Lesson updated successfully",
-        lesson: updatedLesson,
-        files: uploadedFiles,
-      });
-    } catch (error) {
-      res.status(500).json({ error: "Failed to update lesson", details: error.message });
+  const { lessonId } = req.params;
+  const { title, description, deadline, classId, batchId, deleteOldFiles } = req.body;
+  const { files } = req;
+
+  try {
+    const existingLesson = await prisma.lesson.findUnique({
+      where: { id: lessonId },
+      include: { files: true },
+    });
+
+    if (!existingLesson) {
+      return res.status(404).json({ error: "Lesson not found." });
     }
+
+    const updatedLesson = await prisma.lesson.update({
+      where: { id: lessonId },
+      data: {
+        title: title || existingLesson.title,
+        description: description || existingLesson.description,
+        deadline: deadline ? new Date(deadline) : existingLesson.deadline,
+        classId: classId || existingLesson.classId,
+        batchId: batchId || existingLesson.batchId,
+      },
+    });
+
+    if (deleteOldFiles === "true" && existingLesson.files.length > 0) {
+      await Promise.all(
+        existingLesson.files.map(async (file) => {
+          try {
+            fs.unlinkSync(file.filepath);
+          } catch (err) {
+            console.error(`Failed to delete file: ${file.filepath}`, err.message);
+          }
+        })
+      );
+
+      await prisma.file.deleteMany({
+        where: { lessonId },
+      });
+    }
+
+    let uploadedFiles = [];
+    if (files && files.length > 0) {
+      const uploads = files.map((file) =>
+        prisma.file.create({
+          data: {
+            filename: sanitizeFilename(file.originalname),
+            filepath: file.path,
+            mimetype: file.mimetype,
+            size: file.size,
+            lesson: { connect: { id: lessonId } },
+          },
+        })
+      );
+
+      uploadedFiles = await Promise.all(uploads);
+    }
+
+    res.status(200).json({
+      message: "Lesson updated successfully.",
+      lesson: updatedLesson,
+      files: uploadedFiles,
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to update lesson.", details: error.message });
+  }
 });
 
+// Certificate upload endpoint
 const certificateStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    cb(null, path.join(__dirname, '../public/certificate/')); // Destination folder
+    const targetFolder = "public/certificate";
+    ensureDirectoryExistence(targetFolder);
+    cb(null, targetFolder);
   },
   filename: (req, file, cb) => {
-    const uniqueSuffix = `${Date.now()}-${Math.round(Math.random() * 1e9)}`;
-    cb(null, `${uniqueSuffix}-${file.originalname}`); // Create unique filename
+    const sanitizedFilename = sanitizeFilename(file.originalname);
+    cb(null, `${Date.now()}-${sanitizedFilename}`);
   },
 });
 
-const fileFilter = (req, file, cb) => {
-  const allowedMimeTypes = ['application/pdf', 'image/jpeg', 'image/png'];
-  if (allowedMimeTypes.includes(file.mimetype)) {
-    cb(null, true);
-  } else {
-    cb(new Error('Invalid file type. Only PDF, JPEG, and PNG are allowed.'), false);
-  }
-};
-
 const certificateUpload = multer({
-  certificateStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // 5 MB file size limit
-  fileFilter,
+  storage: certificateStorage,
+  limits: { fileSize: 5 * 1024 * 1024 }, // Maximum 5 MB
+  fileFilter: (req, file, cb) => {
+    if (allowedMimeTypes.certificate.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only PDF, JPEG, and PNG are allowed."));
+    }
+  },
 });
 
-// Controller function to handle certificate upload
-router.post('/upload-certificate', certificateUpload.single('certificate'), async (req, res) => {
+router.post("/upload-certificate", certificateUpload.single("certificate"), async (req, res) => {
+  const { traineeId, classId, batchId } = req.body;
+
+  if (!req.file) {
+    return res.status(400).json({ message: "No file uploaded." });
+  }
+
   try {
-    if (!req.file) {
-      return res.status(400).json({ message: 'No file uploaded.' });
-    }
+    const filePath = `public/certificate/${req.file.filename}`;
 
-    const filePath = `/public/certificate/${req.file.filename}`;
-
-    // Save the file path to the database
     const certificate = await prisma.certificate.create({
       data: {
-        traineeId: req.body.traineeId,
-        classId: req.body.classId,
-        batchId: req.body.batchId,
-        status: 'Issued',
+        traineeId,
+        classId,
+        batchId,
+        status: "Issued",
         issuedAt: new Date(),
         filePath,
       },
     });
 
     res.status(200).json({
-      message: 'Certificate uploaded successfully!',
+      message: "Certificate uploaded successfully!",
       certificate,
     });
   } catch (error) {

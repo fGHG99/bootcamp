@@ -185,11 +185,12 @@ model File {
 }
 
 model Profile {
-  id        String  @id @default(uuid())
-  type      ProfileType
-  filepath  String  @db.Text
-  mimetype  String  @db.VarChar(100)
-  size      Int
+  id        String   @id @default(cuid())
+  type      String
   userId    String
-  user      User    @relation(fields: [userId], references: [id], onDelete: Cascade)
+  filepath  String
+  mimetype  String
+  size      Int
+  user      User     @relation(fields: [userId], references: [id])
+  @@unique([userId, type]) //mastiin cuman 1 profile dengan 1 jenis yang terkait pada userId
 }

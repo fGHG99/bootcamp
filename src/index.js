@@ -10,7 +10,7 @@ const { protect, verifyRoles, verifyStatus } = require('./Middlewares/Auth');
 
 const app = express();
 
-app.use("/profile", express.static(path.join(__dirname, "../public/profile")));
+app.use("/profile", express.static(path.join(__dirname, '../public/profile')));
 app.use("/lesson", express.static(path.join(__dirname, "../public/lesson")));
 
 // CORS Configuration
@@ -38,7 +38,7 @@ app.use('/admin', adminRoutes);
 app.use('/trainee', traineeRoutes);
 app.use('/test', Test);
 app.use('/mentor', MentorNote);
-app.use('/uploads', verifyRoles('ADMIN'), UploadRoute);
+app.use('/uploads', UploadRoute);
 
 
 app.get('/', (req, res) => {

@@ -4,7 +4,7 @@
     const { PrismaClient } = prisma;
     const prismaClient = new PrismaClient();
 
-    const SECRET_KEY = process.env.SECRET;
+    const REFRESH_SECRET = process.env.REFRESH_SECRET;
 
     const protect = async (req, res, next) => {
         try {
@@ -18,7 +18,7 @@
             const token = authHeader.split(' ')[1]; // Extract the token
 
             // Verify the token
-            const decoded = jwt.verify(token, process.env.SECRET);
+            const decoded = jwt.verify(token, process.env.REFRESH_SECRET);
 
             // Fetch the user from the database using the ID in the token
             const user = await prismaClient.user.findUnique({
@@ -50,7 +50,7 @@
     
         const token = authHeader.split(" ")[1];
         try {
-            const decoded = jwt.verify(token, SECRET_KEY);
+            const decoded = jwt.verify(token, REFRESH_SECRET);
             const user = await prismaClient.user.findUnique({
             where: { id: decoded.id },
             });
@@ -83,7 +83,7 @@
             const token = authHeader.split(' ')[1];
 
             // Verify the token
-            const decoded = jwt.verify(token, SECRET_KEY, { algorithms: ['HS256'] });
+            const decoded = jwt.verify(token, REFRESH_SECRET, { algorithms: ['HS256'] });
 
             // Retrieve the user from the database
             const user = await prismaClient.user.findUnique({

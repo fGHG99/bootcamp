@@ -93,7 +93,7 @@ router.post('/refresh-token', async (req, res) => {
         return res.status(500).json({ message: 'Error refreshing access token', error: error.message });
     }
 });
-
+    
 // Submit Verification Form Route
 router.post('/submit-verification',protect, async (req, res) => {
     const { id } = req.user;
@@ -227,6 +227,73 @@ router.post('/logout', async (req, res) => {
         }
 
         return res.status(500).json({ message: 'Error during logout', error: error.message });
+    }
+});
+
+router.get('/:id/pro', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const user = await prismaClient.user.findUnique({
+            where: { id },
+            include: {
+                profiles: {
+                    where: { type: 'PROFESSIONAL' },
+                },
+            },
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.profiles.length === 0) {
+            return res.status(404).json({ message: 'No professional profile found' });
+        }
+
+        // Only return the file path relative to the public directory
+        const profileImageUrl = `${user.profiles[0].filepath.replace('public', '')}`;
+
+        return res.status(200).json({
+            profileImage: profileImageUrl, // Returning the relative path after public
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
+    }
+});
+
+
+router.get('/:id/casual', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const user = await prismaClient.user.findUnique({
+            where: { id },
+            include: {
+                profiles: {
+                    where: { type: 'CASUAL' },
+                },
+            },
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (user.profiles.length === 0) {
+            return res.status(404).json({ message: 'No casual profile found' });
+        }
+
+        // Only return the file path relative to the public directory
+        const profileImageUrl = `${user.profiles[0].filepath.replace('public', '')}`;
+
+        return res.status(200).json({
+            profileImage: profileImageUrl, // Returning the relative path after public
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error' });
     }
 });
 
