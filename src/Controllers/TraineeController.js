@@ -263,7 +263,6 @@ router.get('/:id/pro', async (req, res) => {
     }
 });
 
-
 router.get('/:id/casual', async (req, res) => {
     const { id } = req.params;
 
@@ -295,7 +294,87 @@ router.get('/:id/casual', async (req, res) => {
         console.error(error);
         return res.status(500).json({ message: 'Server error' });
     }
-});
+  });
+
+router.delete('/:id/pro', async (req, res) => {
+    const { id } = req.params;
+  
+    try {
+      // Find the user
+      const user = await prismaClient.user.findUnique({
+        where: { id },
+        include: {
+          profiles: {
+            where: { type: 'PROFESSIONAL' },
+          },
+        },
+      });
+  
+      // Check if user exists
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+      // Find the professional profile to delete
+      const professionalProfile = user.profiles[0];
+  
+      if (!professionalProfile) {
+        return res.status(404).json({ message: 'No professional profile found' });
+      }
+  
+      // Delete the professional profile
+      await prismaClient.profile.delete({
+        where: {
+          id: professionalProfile.id,
+        },
+      });
+  
+      return res.status(200).json({ message: 'Professional profile deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting profile:', error);
+      return res.status(500).json({ message: 'Server error' });
+    }
+  });
+
+router.delete('/:id/casual', async (req, res) => {
+    const { id } = req.params;
+  
+    try {
+      // Find the user
+      const user = await prismaClient.user.findUnique({
+        where: { id },
+        include: {
+          profiles: {
+            where: { type: 'CASUAL' },
+          },
+        },
+      });
+  
+      // Check if user exists
+      if (!user) {
+        return res.status(404).json({ message: 'User not found' });
+      }
+  
+      // Find the professional profile to delete
+      const professionalProfile = user.profiles[0];
+  
+      if (!professionalProfile) {
+        return res.status(404).json({ message: 'No casual profile found' });
+      }
+  
+      // Delete the professional profile
+      await prismaClient.profile.delete({
+        where: {
+          id: professionalProfile.id,
+        },
+      });
+  
+      return res.status(200).json({ message: 'Professional profile deleted successfully' });
+    } catch (error) {
+      console.error('Error deleting profile:', error);
+      return res.status(500).json({ message: 'Server error' });
+    }
+  });
 
 
 
