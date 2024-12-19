@@ -88,21 +88,23 @@ model Token {
   userId String
 }
 
-model Batch {
-  id           String    @id @default(uuid())
-  batchNum     Int       @unique
-  batchClass   String    @db.VarChar(50)
-  mentor       User?     @relation("BatchMentor", fields: [mentorId], references: [id])
-  mentorId     String?
-  startDate    DateTime
-  endDate      DateTime
-  participants User[]    @relation("BatchParticipants")
-  status       Status
-  challenges   Challenge[]
-  classes      Class[]   @relation("BatchClasses")
-  lessons      Lesson[]  @relation("BatchLessons")
-  certificates Certificate[]
-}
+  model Batch {
+    id           String    @id @default(uuid())
+    batchNum     Int       @unique
+    batchClass   String    @db.VarChar(50)
+    batchTitle   String?    @db.VarChar(50)
+    batchDesc    String?    @db.VarChar(100)
+    mentor       User?     @relation("BatchMentor", fields: [mentorId], references: [id])
+    mentorId     String?
+    startDate    DateTime
+    endDate      DateTime
+    participants User[]    @relation("BatchParticipants")
+    status       Status
+    challenges   Challenge[]
+    classes      Class[]   @relation("BatchClasses")
+    lessons      Lesson[]  @relation("BatchLessons")
+    certificates Certificate[]
+  }
 
 model Class {
   id          String      @id @default(uuid())

@@ -49,7 +49,7 @@ app.get('/', (req, res) => {
 
 
 const PORT = process.env.PORT || 4000;
-const HOST = process.env.HOST || "10.10.103.20";
+const HOST = process.env.HOST || "10.10.103.169";
 app.listen(PORT, HOST, () => {
     console.log(`Server is running on port ${PORT} and host ${HOST}`);
 });

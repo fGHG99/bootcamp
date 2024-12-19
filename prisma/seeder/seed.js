@@ -24,8 +24,8 @@ async function main() {
     prisma.challenge.deleteMany({}),
     prisma.class.deleteMany({}),
     prisma.batch.deleteMany({}),
-    prisma.user.deleteMany({}),
-    prisma.token.deleteMany({})
+    prisma.token.deleteMany({}),
+    prisma.user.deleteMany({})
   ]);
 
   console.log("Existing data deleted.");
@@ -67,8 +67,10 @@ async function main() {
   // Seed batch
   const batch = await prisma.batch.create({
     data: {
-      batchNum: 12,
+      batchNum: 14,
       batchClass: "Full Stack Development",
+      batchTitle: "Batch 14 - Full Stack Development",
+      batchDesc: "Full stack development course for beginners",
       startDate: new Date("2024-01-01"),
       endDate: new Date("2024-06-01"),
       status: STATUS,
