@@ -294,15 +294,16 @@ const certificateUpload = multer({
   },
 });
 
-router.post("/upload-certificate", certificateUpload.single("certificate"), async (req, res) => {
+router.post("/certificate", certificateUpload.single("certificate"), async (req, res) => {
   const { traineeId, classId, batchId } = req.body;
+  const certificates = req.file;
 
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded." });
   }
 
   try {
-    const filePath = `public/certificate/${req.file.filename}`;
+    const filepath = `public/certificate/${req.file.filename}`;
 
     const certificate = await prisma.certificate.create({
       data: {
@@ -311,7 +312,9 @@ router.post("/upload-certificate", certificateUpload.single("certificate"), asyn
         batchId,
         status: "Issued",
         issuedAt: new Date(),
-        filePath,
+        filepath,
+        mimetype: certificates.mimetype,
+        size: certificates.size,
       },
     });
 

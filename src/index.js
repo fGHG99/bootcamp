@@ -11,8 +11,9 @@ const os = require('os'); // For fetching the local IP address
 
 const app = express();
 
-app.use("/profile", express.static(path.join(__dirname, '../public/profile')));
+app.use("/profile", express.static(path.join(__dirname, "../public/profile")));
 app.use("/lesson", express.static(path.join(__dirname, "../public/lesson")));
+app.use("/certificate", express.static(path.join(__dirname, "../public/certificate")));
 
 // CORS Configuration
 const corsOptions = {

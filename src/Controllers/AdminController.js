@@ -286,7 +286,6 @@ router.get("/users/:role", async (req, res) => {
         id: true,
         fullName: true,
         nickname: true,
-        batchId: true,
         github: true, 
         address: true,
         mobile: true,
@@ -305,6 +304,14 @@ router.get("/users/:role", async (req, res) => {
             className: true,
             createdAt: true,
           },
+        },
+        batches: {
+          select: {
+            id: true,
+            batchNum: true,
+            batchClass: true,
+            batchTitle: true,
+          }
         },
       },
     });

@@ -95,7 +95,7 @@ router.post('/refresh-token', async (req, res) => {
 });
     
 // Submit Verification Form Route
-router.post('/submit-verification',protect, async (req, res) => {
+router.post('/verify',protect, async (req, res) => {
     const { id } = req.user;
     const {
         fullName,
@@ -375,6 +375,36 @@ router.delete('/:id/casual', async (req, res) => {
       return res.status(500).json({ message: 'Server error' });
     }
   });
+
+router.get('/:id/certificate', async (req, res) => {
+    const { id } = req.params;
+
+    try {
+        const user = await prismaClient.user.findUnique({
+            where: { id },
+            include: { certificates: true } // Include the certificates relation
+        });
+
+        if (!user) {
+            return res.status(404).json({ message: 'User not found' });
+        }
+
+        if (!user.certificates || user.certificates.length === 0) {
+            return res.status(404).json({ message: 'No certificates found for this user' });
+        }
+
+        // Only return the file path relative to the public directory
+        const CertificateUrl = `${user.certificates[0].filepath.replace('public', '')}`;
+
+        return res.status(200).json({
+            certificates: CertificateUrl, // Returning the relative path after public
+        });
+    } catch (error) {
+        console.error(error);
+        return res.status(500).json({ message: 'Server error', error: error.message });
+    }
+  });
+
 
 
 
