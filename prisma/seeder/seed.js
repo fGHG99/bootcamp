@@ -6,7 +6,6 @@ const bcrypt = require('bcryptjs');
 const REFRESH_KEY = process.env.REFRESH_SECRET;
 const STATUS = "Ongoing";
 
-
 async function generateRefreshToken(user) {
   return jwt.sign({ id: user.id, role: user.role }, REFRESH_KEY, { expiresIn: '1y' });
 }
@@ -25,6 +24,7 @@ async function main() {
     prisma.class.deleteMany({}),
     prisma.batch.deleteMany({}),
     prisma.token.deleteMany({}),
+    prisma.profile.deleteMany({}),
     prisma.user.deleteMany({})
   ]);
 
@@ -71,70 +71,75 @@ async function main() {
       batchClass: "Full Stack Development",
       batchTitle: "Batch 14 - Full Stack Development",
       batchDesc: "Full stack development course for beginners",
-      startDate: new Date("2024-01-01"),
-      endDate: new Date("2024-06-01"),
+      startDate: new Date("2024-01-01T00:00:00.000Z"),
+      endDate: new Date("2024-06-01T00:00:00.000Z"),
       status: STATUS,
       mentor: {
         create: mentor,
-      },
-      participants: {
-        create: [participant1, participant2],
       },
       classes: {
         create: [
           {
             className: "Full stack development",
-            createdAt: new Date("2024-01-15"),
+            createdAt: new Date("2024-01-15T00:00:00.000Z"),
             participant: 20,
           },
           {
             className: "Quality Assurance",
-            createdAt: new Date("2024-02-01"),
+            createdAt: new Date("2024-02-01T00:00:00.000Z"),
             participant: 18,
           },
         ],
       },
-    },
+    }
   });
 
   console.log("Batch created:", batch);
 
-  // Seed classes and challenges
+  // Create classes and assign participants to classes
   const class1 = await prisma.class.create({
     data: {
       className: "Full stack development",
-      createdAt: new Date("2024-01-15"),
-      participant: 20,
-      batchId: batch.id,
-      challenges: {
+      createdAt: new Date("2024-01-15T00:00:00.000Z"),
+      participant: 20, // Assuming this is the number of participants
+      batchId: batch.id, // Linking to the existing batch
+      users: {  // Use 'users' if it's the correct relation field
         create: [
           {
-            createdAt: new Date("2024-01-20"),
-            batchId: batch.id,
+            email: "student1@example.com",
+            fullName: "Alice",
+            password: participant1Password,
+            role: "TRAINEE",
+            userstatus: "UNVERIFIED",
+            refreshToken: participant1.refreshToken,
           },
         ],
       },
     },
   });
-
+  
   const class2 = await prisma.class.create({
     data: {
       className: "Quality Assurance",
-      createdAt: new Date("2024-02-01"),
-      participant: 18,
-      batchId: batch.id,
-      challenges: {
+      createdAt: new Date("2024-02-01T00:00:00.000Z"),
+      participant: 18, // Assuming this is the number of participants
+      batchId: batch.id, // Linking to the existing batch
+      users: {  // Use 'users' if it's the correct relation field
         create: [
           {
-            createdAt: new Date("2024-02-10"),
-            batchId: batch.id,
+            email: "student2@example.com",
+            fullName: "Bob",
+            password: participant2Password,
+            role: "TRAINEE",
+            userstatus: "UNVERIFIED",
+            refreshToken: participant2.refreshToken,
           },
         ],
       },
     },
   });
 
-  console.log("Class 1 and Class 2 with Challenges created:", class1, class2);
+  console.log("Class 1 and Class 2 with Participants created:", class1, class2);
 }
 
 main()

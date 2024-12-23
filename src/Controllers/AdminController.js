@@ -129,6 +129,24 @@ router.post('/class', verifyRoles(['ADMIN']), async (req, res) => {
   }
 });
 
+router.get('/class', async (req, res) => {
+  try {
+    const classes = await prismaClient.class.findMany({
+      select: {
+        id: true,
+        className: true,
+        participant: true,
+        batchId: true,
+        createdAt: true,
+      },
+    });
+
+    res.status(200).json(classes);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.post('/batch', verifyRoles(['ADMIN']), async (req, res) => {
   try {
     const { batchNum, batchClass, batchTitle, batchDesc, mentorId, startDate, endDate, status } = req.body;
@@ -255,5 +273,93 @@ router.get('/mentor/:userId', async (req, res) => {
     res.status(500).json({ message: 'Internal server error' });
   }
 });
+
+// get user from dynamic role
+router.get("/users/:role", async (req, res) => {
+  try {
+    const { role } = req.params; // Extract role from path parameters
+
+    // Fetch users based on the role
+    const users = await prismaClient.user.findMany({
+      where: { role },
+      select: {
+        id: true,
+        fullName: true,
+        nickname: true,
+        batchId: true,
+        github: true, 
+        address: true,
+        mobile: true,
+        email: true,
+        confident: true,
+        certificates: {
+          select: {
+            id: true,
+            traineeId: true,
+            issuedAt: true,
+          },
+        },
+        classes: {
+          select: {
+            id: true,
+            className: true,
+            createdAt: true,
+          },
+        },
+      },
+    });
+
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+
+router.get('/class/:classId', async (req, res) => {
+  const { classId } = req.params;
+
+  try {
+    // Fetch users based on classId
+    const users = await prismaClient.user.findMany({
+      where: {
+        classes: {
+          some: {
+            id: classId, // Ensure this is the correct relation and column name
+          },
+        },
+      },
+      include: {
+        classes: true, // Include the related classes if needed
+      },
+    });
+
+    if (!users || users.length === 0) {
+      return res.status(404).json({ message: 'No users found for this class.' });
+    }
+
+    // Count the number of users enrolled in the class
+    const participantCount = users.length;
+
+    // Update the class to reflect the number of participants
+    await prismaClient.class.update({
+      where: { id: classId },
+      data: {
+        participant: participantCount,
+      },
+    });
+
+    // Return the users along with the updated participant count
+    return res.status(200).json({
+      classId,
+      participantCount,
+      users,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'An error occurred while fetching users.' });
+  }
+});
+
 
 module.exports = router;

@@ -248,7 +248,7 @@ router.get('/:id/pro', async (req, res) => {
         }
 
         if (user.profiles.length === 0) {
-            return res.status(404).json({ message: 'No professional profile found' });
+            return null;
         }
 
         // Only return the file path relative to the public directory
