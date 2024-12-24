@@ -147,7 +147,7 @@ router.get('/class', async (req, res) => {
   }
 });
 
-router.post('/batch', verifyRoles(['ADMIN']), async (req, res) => {
+router.post('/batch', async (req, res) => {
   try {
     const { batchNum, batchClass, batchTitle, batchDesc, mentorId, startDate, endDate, status } = req.body;
 
@@ -368,5 +368,32 @@ router.get('/class/:classId', async (req, res) => {
   }
 });
 
+router.get('/batch/:mentorId', async (req, res) => {
+  const { mentorId } = req.params;
+
+  try {
+    const batches = await prismaClient.batch.findMany({
+      where: { mentorId },
+      include: {
+        mentor: {
+          select: { id: true, fullName: true, email: true }, 
+        },
+        participants: true,
+        challenges: true, 
+        classes: true, 
+        lessons: true, 
+      },
+    });
+
+    if (batches.length === 0) {
+      return res.status(404).json({ message: 'No batches found for this mentor.' });
+    }
+
+    res.status(200).json(batches);
+  } catch (error) {
+    console.error('Error fetching batches:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
+});
 
 module.exports = router;
