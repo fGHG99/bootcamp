@@ -51,15 +51,16 @@ function getLocalIpAddress() {
 }
 const serverIp = getLocalIpAddress();
 
-app.get('/', (req, res) => {
-    const ipAddress = req.ip;
-    res.send(`Your IP address is: ${ipAddress}`);
-    console.log(`Your IP address is: ${ipAddress}`);
-});
+// app.get('/', (req, res) => {
+//     const ipAddress = req.ip;
+//     res.send(`Your IP address is: ${ipAddress}`);
+//     console.log(`Your IP address is: ${ipAddress}`);
+// });
 
 const PORT = process.env.PORT || 4000;
 const HOST = serverIp; 
 
 app.listen(PORT, HOST, () => {
     console.log(`Server is running on http://${HOST}:${PORT}`);
+    console.log(`Your IP address is: ${HOST}`);
 });
