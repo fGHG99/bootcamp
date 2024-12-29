@@ -225,12 +225,24 @@ router.get('/batch', async (req, res) => {
       const batch = await prismaClient.batch.findUnique({
         where: { id },
         include: {
-          mentors: true,         // Include mentor details
-          participants: true,    // Include participant details
-          classes: true,         // Include class details
-          challenges: true,      // Include challenge details
-          lessons: true,         // Include lesson details
-          certificates: true,    // Include certificate details
+          mentors: {
+            select: {
+              id: true,
+              fullName: true,
+              nickname: true,
+            },
+          },
+          participants : {
+            select: {
+              id: true,
+              fullName: true,
+              nickname: true,
+            },
+          },   // Include participant details
+          classes: true,        // Include class details
+          challenges: true,     // Include challenge details
+          lessons: true,        // Include lesson details
+          certificates: true,   // Include certificate details
         },
       });
 
@@ -238,26 +250,39 @@ router.get('/batch', async (req, res) => {
         return res.status(404).json({ error: 'Batch not found' });
       }
 
-      res.status(200).json(batch);
+      return res.status(200).json(batch);
     } else {
       // Fetch all batches, including associated mentors, participants, classes, etc.
       const batches = await prismaClient.batch.findMany({
         include: {
-          mentors: true,         // Include mentor details
-          participants: true,    // Include participant details
-          classes: true,         // Include class details
-          challenges: true,      // Include challenge details
-          lessons: true,         // Include lesson details
-          certificates: true,    // Include certificate details
+          mentors: {
+            select: {
+              id: true,
+              fullName: true,
+              nickname: true,
+            },
+          },
+          participants: {
+            select: {
+              id: true,
+              fullName: true,
+              nickname: true,
+            },
+          },  
+          classes: true,
+          challenges: true,
+          lessons: true,
+          certificates: true,
         },
       });
 
-      res.status(200).json(batches);
+      return res.status(200).json(batches);
     }
   } catch (error) {
-    res.status(500).json({ error: error.message });
-  }
+    res.status(500).json({ error: error.message });
+  }
 });
+
 
 router.get('/batchs/:id', async (req, res) => {
   try {
@@ -333,6 +358,7 @@ router.delete('/:lessonId/delete', async (req, res) => {
   }
 });
 
+//router to get mentor details
 router.get('/mentor/:userId', async (req, res) => {
   const { userId } = req.params;
 
@@ -406,6 +432,7 @@ router.get("/users/:role", async (req, res) => {
   }
 });
 
+//router to get user based on class
 router.get('/class/:classId', async (req, res) => {
   const { classId } = req.params;
 
@@ -451,6 +478,7 @@ router.get('/class/:classId', async (req, res) => {
   }
 });
 
+//router to get batch based on mentor
 router.get('/batch/:mentorId', async (req, res) => {
   const { mentorId } = req.params;
 
@@ -486,6 +514,7 @@ router.get('/batch/:mentorId', async (req, res) => {
   }
 });
 
+//router to assign mentors to a batch
 router.put('/batch/:id', async (req, res) => {
   const { id } = req.params;
   const { batchNum, batchClass, batchTitle, mentors } = req.body;
@@ -524,6 +553,50 @@ router.put('/batch/:id', async (req, res) => {
     console.error('Error updating batch:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
+});
+
+//router to assign participants to a batch
+router.put('/batch/:id/participants', async (req, res) => {
+  const { id } = req.params;
+  const { participants } = req.body; // Expect an array of participant IDs
+
+  try {
+    // Ensure the batch with the given ID exists
+    const existingBatch = await prismaClient.batch.findUnique({ where: { id } });
+    if (!existingBatch) {
+      return res.status(404).json({ error: 'Batch not found' });
+    }
+
+    // Build update data dynamically for participants
+    const updateData = {};
+    if (participants !== undefined) {
+      updateData.participants = {
+        set: participants.map((participantId) => ({ id: participantId })), // Update participants
+      };
+    }
+
+    // Perform the update without requiring other fields
+    const updatedBatch = await prismaClient.batch.update({
+      where: { id },
+      data: updateData,
+      include: {
+        participants: {
+          select: { id: true, fullName: true, email: true }, // Customize fields as needed
+        },
+        // Include other relationships as necessary
+        mentors: { select: { id: true, fullName: true, email: true } },
+        // classes: true,
+        // challenges: true,
+        // lessons: true,
+        // certificates: true,
+      },
+    });
+
+    res.status(200).json(updatedBatch);
+  } catch (error) {
+    console.error('Error updating participants:', error);
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
 module.exports = router;
