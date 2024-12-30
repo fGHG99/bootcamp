@@ -135,12 +135,30 @@ router.get('/class', async (req, res) => {
       select: {
         id: true,
         className: true,
-        participant: true,
+        participant: true, // The count of participants
         batchId: true,
-        classMentors: true,
-        createdAt: true,
+        batch: {
+          select: {
+            id: true,
+            batchNum: true,
+            batchClass: true,
+            batchTitle: true,
+          },
+        }, // Fetch related batch details
+        mentors: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        }, // Fetch mentor details
+        challenges: true,
+        lessons: true,
+        certificates: true,
+        status: true,
       },
     });
+    
 
     res.status(200).json(classes);
   } catch (error) {
@@ -196,25 +214,29 @@ router.put('/class/:id', async (req, res) => {
 
 router.post('/batch', async (req, res) => {
   try {
-    const { batchNum, batchClass, batchTitle, batchDesc, mentorId, startDate, endDate, status } = req.body;
+    const { batchNum, batchClass, batchTitle, batchDesc, mentorIds, startDate, endDate, status } = req.body;
 
     const batch = await prismaClient.batch.create({
       data: {
         batchNum,
         batchClass,
-        batchTitle, // Include batchTitle
-        batchDesc,  // Include batchDesc
-        mentorId,
+        batchTitle,
+        batchDesc,
         startDate: new Date(startDate),
         endDate: new Date(endDate),
         status,
+        mentors: {
+          connect: mentorIds.map((id) => ({ id })), // Connect existing mentors
+        },
       },
     });
+
     res.status(201).json(batch);
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
 });
+
 
 router.get('/batch', async (req, res) => {
   try {

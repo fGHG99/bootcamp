@@ -142,7 +142,7 @@ model Note {
   createdAt   DateTime    @default(now())
 }
 
-model Lesson {
+model Lesson {  
   id          String   @id @default(uuid())
   title       String   @db.VarChar(100)
   description String   @db.VarChar(300)
