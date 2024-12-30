@@ -445,6 +445,7 @@ router.get("/users/:role", async (req, res) => {
             batchTitle: true,
           }
         },
+        isLoggedIn: true,
       },
     });
 

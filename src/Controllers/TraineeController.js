@@ -39,12 +39,15 @@ router.post('/login', async (req, res) => {
             return res.status(401).json({ message: 'Username or password is incorrect' });
         }
 
-        const accessToken = jwt.sign({ id: user.id, role: user.role }, SECRET_KEY, { expiresIn: '5m' });
+        const accessToken = jwt.sign({ id: user.id, role: user.role }, SECRET_KEY, { expiresIn: '30m' });
         const refreshToken = jwt.sign({ id: user.id, role: user.role }, REFRESH_KEY, { expiresIn: '1y' });
 
         await prismaClient.user.update({
             where: { email },
-            data: { refreshToken },
+            data: {
+                isLoggedIn: true, 
+                refreshToken,
+            },
         });
 
         return res.status(200).json({
@@ -204,18 +207,21 @@ router.put('/edit', protect, async (req, res) => {
 
 // Logout Route
 router.post('/logout', async (req, res) => {
-    const { refreshToken } = req.body;
+    const { accessToken } = req.body;
 
-    if (!refreshToken) {
+    if (!accessToken) {
         return res.status(400).json({ message: 'Refresh token is required' });
     }
     
     try {
-        const decoded = jwt.verify(refreshToken, REFRESH_KEY);
+        const decoded = jwt.verify(accessToken, SECRET_KEY);
 
         await prismaClient.user.update({
             where: { id: decoded.id },
-            data: { refreshToken: null },
+            data: { 
+                isLoggedIn: false,
+                refreshToken: null 
+            },
         });
 
         return res.status(200).json({ message: 'Logout successful' });
