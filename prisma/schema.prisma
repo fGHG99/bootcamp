@@ -82,6 +82,7 @@ model User {
   certificates     Certificate[]
   profiles         Profile[]
   classes          Class[]     @relation("UserClasses")
+  notification     Notification[]
 }
 
 model Token {
@@ -224,3 +225,15 @@ model Profile {
   user      User     @relation(fields: [userId], references: [id])
   @@unique([userId, type]) //mastiin cuman 1 profile dengan 1 jenis yang terkait pada userId
 }
+
+model Notification {
+  id          String   @id @default(uuid())
+  userId      String
+  user        User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title       String
+  description String
+  type        String
+  createdAt   DateTime @default(now())
+  isRead      Boolean  @default(false)
+}
+

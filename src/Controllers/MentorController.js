@@ -73,6 +73,7 @@ router.get('/notes/:graderId/:visibility?', protect, async (req, res) => {
         id: note.trainee.id,
         fullName: note.trainee.fullName || 'Unknown',
         nickname: note.trainee.nickname || 'No Nickname',
+        email: note.trainee.email || 'No Email',
       },
     }));
 
