@@ -77,7 +77,8 @@ model User {
   classMentors     Class[]  @relation("ClassMentors")
   notes            Note[]   @relation("GraderNotes")
   receivedNotes    Note[]   @relation("TraineeNotes")
-  lessonCompletions LessonCompletion[]
+  lesCompletions   LessonCompletion[]
+  chCompletions    ChallengeCompletion[]
   certificates     Certificate[]
   profiles         Profile[]
   classes          Class[]     @relation("UserClasses")
@@ -124,19 +125,31 @@ model Class {
 
 
 model Challenge {
-  id        String @id @default(uuid())
+  id          String @id @default(uuid())
   title       String   @db.VarChar(100)
   description String   @db.VarChar(300)
-  batch     Batch  @relation(fields: [batchId], references: [id])
-  batchId   String
-  class     Class  @relation(fields: [classId], references: [id])
-  classId   String
-  createdAt DateTime
+  batch       Batch  @relation(fields: [batchId], references: [id])
+  batchId     String
+  class        Class  @relation(fields: [classId], references: [id])
+  classId     String
+  createdAt   DateTime
   deadline    DateTime
   status      LessonStatus @default(NOT_DEADLINE)
-  filepath  String  @db.Text
-  mimetype  String
-  size      Int
+  filepath    String  @db.Text
+  mimetype    String
+  size        Int
+  completions ChallengeCompletion[]
+}
+
+model ChallengeCompletion {
+  id           String    @id @default(uuid())
+  userId       String
+  user         User      @relation(fields: [userId], references: [id], onDelete: Cascade)
+  challengeId  String
+  challenge    Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  completed    Boolean   @default(false)
+  completedAt  DateTime?
+  @@unique([userId, challengeId]) // Composite unique constraint
 }
 
 model Note {
@@ -173,6 +186,7 @@ model LessonCompletion {
   lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   completed   Boolean  @default(false)
   completedAt DateTime?
+  @@unique([userId, lessonId])
 }
 
 model Certificate {

@@ -151,7 +151,14 @@ router.get('/class', async (req, res) => {
             fullName: true,
             email: true,
           },
-        }, // Fetch mentor details
+        }, 
+        users: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
         challenges: true,
         lessons: true,
         certificates: true,
@@ -166,6 +173,7 @@ router.get('/class', async (req, res) => {
   }
 });
 
+//router to assign mentor to classes
 router.put('/class/:id', async (req, res) => {
   const { id } = req.params;
   const { className, mentors } = req.body;

@@ -1,6 +1,7 @@
 const express = require('express');
 const prisma = require('@prisma/client').PrismaClient;
 const { protect } = require('../Middlewares/Auth'); // JWT middleware
+const jwt = require('jsonwebtoken');
 
 const router = express.Router();
 const prismaClient = new prisma();
@@ -162,6 +163,98 @@ router.delete('/notes/:noteId', protect, async (req, res) => {
   } catch (error) {
     console.error(error);
     res.status(500).json({ error: 'Server error' });
+  }
+});
+
+async function verifyMentor(req, res, next) {
+  const refreshToken = req.headers.refreshToken || req.headers.authorization?.split(" ")[1];
+
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Refresh token is required.' });
+  }
+
+  try {
+    const decoded = jwt.decode(refreshToken);
+
+    if (!decoded || decoded.role !== 'MENTOR') {
+      return res.status(403).json({ error: 'Access denied. Mentor role required.' });
+    }
+
+    req.mentorId = decoded.id;
+    next();
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to authenticate.', details: error.message });
+  }
+}
+
+// Get lesson and challenge percentage by mentor
+router.get('/completion-percentage', verifyMentor, async (req, res) => {
+  const { mentorId } = req;
+
+  try {
+    // Get all classes assigned to the mentor
+    const classes = await prismaClient.class.findMany({
+      where: {
+        mentors: {
+          some: {
+            id: mentorId,
+          },
+        },
+      },
+      include: {
+        lessons: true,
+        challenges: true,
+      },
+    });
+
+    let totalLessons = 0;
+    let totalCompletedLessons = 0;
+    let totalChallenges = 0;
+    let totalCompletedChallenges = 0;
+
+    const percentages = await Promise.all(
+      classes.map(async (classItem) => {
+        const classTotalLessons = classItem.lessons.length;
+        const classCompletedLessons = await prismaClient.lessonCompletion.count({
+          where: {
+            lesson: { classId: classItem.id },
+            completed: true,
+          },
+        });
+
+        const classTotalChallenges = classItem.challenges.length;
+        const classCompletedChallenges = await prismaClient.challengeCompletion.count({
+          where: {
+            challenge: { classId: classItem.id },
+            completed: true,
+          },
+        });
+
+        // Aggregate totals for whole class percentages
+        totalLessons += classTotalLessons;
+        totalCompletedLessons += classCompletedLessons;
+        totalChallenges += classTotalChallenges;
+        totalCompletedChallenges += classCompletedChallenges;
+
+        return {
+          classId: classItem.id,
+          className: classItem.name,
+          lessonPercentage: classTotalLessons > 0 ? (classCompletedLessons / classTotalLessons) * 100 : 0,
+          challengePercentage: classTotalChallenges > 0 ? (classCompletedChallenges / classTotalChallenges) * 100 : 0,
+        };
+      })
+    );
+
+    const wholeClassLessonPercentage = totalLessons > 0 ? (totalCompletedLessons / totalLessons) * 100 : 0;
+    const wholeClassChallengePercentage = totalChallenges > 0 ? (totalCompletedChallenges / totalChallenges) * 100 : 0;
+
+    res.status(200).json({
+      percentages,
+      wholeClassLessonPercentage: wholeClassLessonPercentage.toFixed(2),
+      wholeClassChallengePercentage: wholeClassChallengePercentage.toFixed(2),
+    });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch completion percentages.', details: error.message });
   }
 });
 
