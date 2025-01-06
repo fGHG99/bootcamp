@@ -125,11 +125,18 @@ model Class {
 
 model Challenge {
   id        String @id @default(uuid())
-  createdAt DateTime
+  title       String   @db.VarChar(100)
+  description String   @db.VarChar(300)
   batch     Batch  @relation(fields: [batchId], references: [id])
   batchId   String
   class     Class  @relation(fields: [classId], references: [id])
   classId   String
+  createdAt DateTime
+  deadline    DateTime
+  status      LessonStatus @default(NOT_DEADLINE)
+  filepath  String  @db.Text
+  mimetype  String
+  size      Int
 }
 
 model Note {

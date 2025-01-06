@@ -326,4 +326,66 @@ router.post("/certificate", certificateUpload.single("certificate"), async (req,
   }
 });
 
+// Configure multer storage for challenge uploads
+const challengeStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const targetFolder = "public/challenge";
+    ensureDirectoryExistence(targetFolder);
+    cb(null, targetFolder);
+  },
+  filename: (req, file, cb) => {
+    const sanitizedFilename = sanitizeFilename(file.originalname);
+    cb(null, `${Date.now()}-${sanitizedFilename}`);
+  },
+});
+
+const challengeUpload = multer({
+  storage: challengeStorage,
+  limits: { fileSize: 50 * 1024 * 1024 }, // Maximum file size 50 MB
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = ["application/pdf", "image/jpeg", "image/png", "application/zip"];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only PDF, JPEG, PNG, and ZIP are allowed."));
+    }
+  },
+});
+
+// Challenge upload endpoint
+router.post("/challenge", challengeUpload.single("file"), async (req, res) => {
+  const { title, description, batchId, classId, deadline } = req.body;
+  const file = req.file;
+
+  if (!title || !description || !batchId || !classId || !deadline) {
+    return res.status(400).json({ error: "All fields (title, description, batchId, classId, deadline) are required." });
+  }
+
+  try {
+    const challenge = await prisma.challenge.create({
+      data: {
+        title,
+        description,
+        batchId,
+        classId,
+        createdAt: new Date(),
+        deadline: new Date(deadline),
+        filepath: file.path,
+        mimetype: file.mimetype,
+        size: file.size,
+      },
+    });
+
+    res.status(201).json({
+      message: "Challenge uploaded successfully.",
+      challenge,
+    });
+  } catch (error) {
+    res.status(500).json({
+      error: "Failed to upload challenge.",
+      details: error.message,
+    });
+  }
+});
+
 module.exports = router;

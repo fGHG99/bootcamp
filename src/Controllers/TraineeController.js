@@ -411,7 +411,81 @@ router.get('/:id/certificate', async (req, res) => {
     }
   });
 
+// Middleware to extract userId from refreshToke
+const getUserId = async (req, res, next) => {
+    try {
+      const refreshToken = req.headers.refreshToken || req.headers.authorization?.split(" ")[1];
+      if (!refreshToken) {
+        console.log('', refreshToken);
+        return res.status(401).json({ error: "Refresh token is required." });
+      }
+  
+      // Decode the JWT to get the user ID
+      const decoded = jwt.decode(refreshToken);
+      if (!decoded || !decoded.id) {
+        return res.status(401).json({ error: "Invalid refresh token." });
+      }
+  
+      const user = await prismaClient.user.findUnique({
+        where: { id: decoded.id },
+        include: {
+          classes: true,
+          batches: true,
+        },
+      });
+      console.log("id", decoded.id);
+  
+      if (!user) {
+        return res.status(404).json({ error: "User not found." });
+      }
+  
+      req.user = user;
+      next();
+    } catch (error) {
+      res.status(500).json({ error: "Failed to authenticate user.", details: error.message });
+    }
+  };
 
-
+  // Route to get challenges based on userId
+router.get("/challenges", getUserId, async (req, res) => {
+    try {
+      const { classes, batches } = req.user;
+  
+      const classIds = classes.map((cls) => cls.id);
+      const batchIds = batches.map((batch) => batch.id);
+  
+      const challenges = await prismaClient.challenge.findMany({
+        where: {
+          classId: { in: classIds },
+          batchId: { in: batchIds },
+        },
+      });
+  
+      res.status(200).json({ challenges });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch challenges.", details: error.message });
+    }
+});
+  
+  // Route to get lessons based on userId
+router.get("/lessons", getUserId, async (req, res) => {
+    try {
+      const { classes, batches } = req.user;
+  
+      const classIds = classes.map((cls) => cls.id);
+      const batchIds = batches.map((batch) => batch.id);
+  
+      const lessons = await prismaClient.lesson.findMany({
+        where: {
+          classId: { in: classIds },
+          batchId: { in: batchIds },
+        },
+      });
+  
+      res.status(200).json({ lessons });
+    } catch (error) {
+      res.status(500).json({ error: "Failed to fetch lessons.", details: error.message });
+    }
+});
 
 module.exports = router;
