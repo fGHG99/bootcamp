@@ -71,7 +71,7 @@ model User {
   refreshToken     String?
   role             Role
   userstatus       UserStatus
-  isLoggedIn       Boolean   @default(false)
+  isLoggedIn       Boolean  @default(false)
   batches          Batch[]  @relation("BatchParticipants")
   mentors          Batch[]  @relation("BatchMentors")
   classMentors     Class[]  @relation("ClassMentors")
@@ -83,6 +83,8 @@ model User {
   profiles         Profile[]
   classes          Class[]     @relation("UserClasses")
   notification     Notification[]
+  uploadedLessons  Lesson[]    @relation("UploadedLessons") // Bidirectional relation to Lesson
+  uploadedChallenges Challenge[] @relation("UploadedChallenges") // Bidirectional relation to Challenge
 }
 
 model Token {
@@ -124,7 +126,6 @@ model Class {
   mentors     User[]      @relation("ClassMentors")
 }
 
-
 model Challenge {
   id          String @id @default(uuid())
   title       String   @db.VarChar(100)
@@ -140,6 +141,8 @@ model Challenge {
   mimetype    String
   size        Int
   completions ChallengeCompletion[]
+  mentorId    String
+  mentor      User    @relation("UploadedChallenges", fields: [mentorId], references: [id], onDelete: Cascade) // Mentor relation
 }
 
 model ChallengeCompletion {
@@ -150,7 +153,7 @@ model ChallengeCompletion {
   challenge    Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
   completed    Boolean   @default(false)
   completedAt  DateTime?
-  @@unique([userId, challengeId]) // Composite unique constraint
+  @@unique([userId, challengeId]) 
 }
 
 model Note {
@@ -177,6 +180,8 @@ model Lesson {
   classId     String
   class       Class    @relation("ClassLessons", fields: [classId], references: [id], onDelete: Cascade)
   completions LessonCompletion[]
+  mentorId    String
+  mentor      User     @relation("UploadedLessons", fields: [mentorId], references: [id], onDelete: Cascade) // Mentor relation
 }
 
 model LessonCompletion {

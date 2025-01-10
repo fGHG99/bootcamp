@@ -1,17 +1,23 @@
 const express = require('express');
 const cors = require('cors');
+const http = require('http'); // Required for Socket.IO
+const path = require("path");
+const os = require('os'); 
+
 const adminRoutes = require('./Controllers/AdminController');
 const traineeRoutes = require('./Controllers/TraineeController');
 const Test = require('./Routes/Test');
 const MentorNote = require('./Controllers/MentorController');
 const UploadRoute = require('./Controllers/UploadController');
-const path = require("path");
 const Complete = require("./Controllers/CompletionLesson");
-const { protect, verifyRoles, verifyStatus } = require('./Middlewares/Auth');
-const os = require('os'); // For fetching the local IP address
+const Middleware = require('./Middlewares/RouterClientSide');
+const socket = require('./Controllers/SocketHandler'); // Import the Socket.IO handler
 
 const app = express();
+const server = http.createServer(app);
+const io = socket.init(server); // Initialize Socket.IO
 
+// Static file configuration
 app.use("/profile", express.static(path.join(__dirname, "../public/profile")));
 app.use("/lesson", express.static(path.join(__dirname, "../public/lesson")));
 app.use("/certificate", express.static(path.join(__dirname, "../public/certificate")));
@@ -25,10 +31,8 @@ const corsOptions = {
     optionsSuccessStatus: 200,
 };
 
-// Apply CORS middleware
 app.use(cors(corsOptions));
 app.options('*', cors(corsOptions));
-
 app.use(express.json());
 
 // Routes
@@ -38,6 +42,7 @@ app.use('/test', Test);
 app.use('/mentor', MentorNote);
 app.use('/uploads', UploadRoute);
 app.use('/complete', Complete);
+app.use('/api', Middleware);
 
 // Get the local IP address of the server
 function getLocalIpAddress() {
@@ -53,16 +58,11 @@ function getLocalIpAddress() {
 }
 const serverIp = getLocalIpAddress();
 
-// app.get('/', (req, res) => {
-//     const ipAddress = req.ip;
-//     res.send(`Your IP address is: ${ipAddress}`);
-//     console.log(`Your IP address is: ${ipAddress}`);
-// });
-
 const PORT = process.env.PORT || 4000;
 const HOST = serverIp; 
 
-app.listen(PORT, HOST, () => {
+// Start the server
+server.listen(PORT, HOST, () => {
     console.log(`Server is running on http://${HOST}:${PORT}`);
     console.log(`Your IP address is: ${HOST}`);
 });

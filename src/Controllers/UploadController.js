@@ -326,7 +326,6 @@ router.post("/certificate", certificateUpload.single("certificate"), async (req,
   }
 });
 
-// Configure multer storage for challenge uploads
 const challengeStorage = multer.diskStorage({
   destination: (req, file, cb) => {
     const targetFolder = "public/challenge";
@@ -354,20 +353,33 @@ const challengeUpload = multer({
 
 // Challenge upload endpoint
 router.post("/challenge", challengeUpload.single("file"), async (req, res) => {
-  const { title, description, batchId, classId, deadline } = req.body;
+  const { title, description, batchId, classId, deadline, mentorId } = req.body; // Added mentorId
   const file = req.file;
 
-  if (!title || !description || !batchId || !classId || !deadline) {
-    return res.status(400).json({ error: "All fields (title, description, batchId, classId, deadline) are required." });
+  // Validate required fields
+  if (!title || !description || !batchId || !classId || !deadline || !mentorId) {
+    return res.status(400).json({ error: "All fields (title, description, batchId, classId, deadline, mentorId) are required." });
+  }
+
+  // Validate deadline
+  if (isNaN(Date.parse(deadline))) {
+    return res.status(400).json({ error: "Invalid deadline format. Please provide a valid date." });
+  }
+
+  // Check if a file was uploaded
+  if (!file) {
+    return res.status(400).json({ error: "File is required for uploading a challenge." });
   }
 
   try {
+    // Create the challenge record in the database
     const challenge = await prisma.challenge.create({
       data: {
         title,
         description,
         batchId,
         classId,
+        mentorId, // Save the mentor ID
         createdAt: new Date(),
         deadline: new Date(deadline),
         filepath: file.path,

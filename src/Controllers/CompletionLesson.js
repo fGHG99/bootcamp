@@ -1,5 +1,7 @@
 const { PrismaClient } = require('@prisma/client');
 const express = require('express');
+const socket = require('./SocketHandler')
+const getUserIdFromToken  = require('../Routes/GetUserId');
 
 const prisma = new PrismaClient();
 const router = express.Router();
@@ -70,8 +72,12 @@ router.post('/lesson', async (req, res) => {
   }
 });
 
-// Mark a challenge as completed
 router.post('/challenge', async (req, res) => {
+  const refreshToken = req.headers.refreshToken || req.headers.authorization?.split(" ")[1];
+  if (!refreshToken) {
+    return res.status(401).json({ error: 'Refresh token is required.' });
+  }
+
   const { userId, challengeId } = req.body;
 
   if (!userId || !challengeId) {
@@ -89,9 +95,9 @@ router.post('/challenge', async (req, res) => {
       },
     });
 
-    if (existingCompletion && existingCompletion.completed) {
-      return res.status(200).json({ message: 'You already submitted this challenge.' });
-    }
+    // if (existingCompletion && existingCompletion.completed) {
+    //   return res.status(200).json({ message: 'You already submitted this challenge.' });
+    // }
 
     // Mark challenge as completed
     await prisma.challengeCompletion.upsert({
@@ -112,6 +118,54 @@ router.post('/challenge', async (req, res) => {
         completedAt: new Date(),
       },
     });
+
+     // Replace with how you retrieve the token
+    const mentorId = getUserIdFromToken(refreshToken);
+
+    console.log('Mentor ID:', mentorId);
+    // Create a new notification for the user
+    const userNotification = await prisma.notification.create({
+      data: {
+        userId,
+        title: 'Challenge Completed!',
+        description: `You have successfully completed challenge ID: ${challengeId}.`,
+        type: 'success',
+      },
+    });
+    console.log('User notification created:', userNotification);
+
+    const io = socket.getIO();
+    io.to(userId).emit('receiveNotification', {
+      id: userNotification.id,
+      title: userNotification.title,
+      description: userNotification.description,
+      type: userNotification.type,
+      createdAt: userNotification.createdAt,
+    });
+
+    const notifyMentor = async (mentorId, challengeId) => {
+      // Create a notification for the mentor
+      const mentorNotification = await prisma.notification.create({
+        data: {
+          userId: mentorId,
+          title: 'Student Challenge Completion',
+          description: `Your student has completed challenge ID: ${challengeId}.`,
+          type: 'info',
+        },
+      });
+      console.log('Mentor notification created:', mentorNotification);
+
+      // Emit notification to the mentor
+      io.to(mentorId).emit('receiveNotification', {
+        id: mentorNotification.id,
+        title: mentorNotification.title,
+        description: mentorNotification.description,
+        type: mentorNotification.type,
+        createdAt: mentorNotification.createdAt,
+      });
+    };
+
+    await notifyMentor(mentorId, challengeId);
 
     // Calculate progress
     const progressData = await calculateProgress(userId);
@@ -135,6 +189,7 @@ router.post('/challenge', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
+
 
 // Get completion percentages for lessons and challenges
 router.get('/percentage', async (req, res) => {

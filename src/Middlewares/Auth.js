@@ -109,4 +109,39 @@
         }
     };
 
-    module.exports = { protect, verifyRoles, verifyStatus };
+    const tokenExpirationMiddleware = async (req, res, next) => {
+        try {
+            const accessToken = req.headers.authorization?.split(' ')[1]; // Extract token from Authorization header
+            if (!accessToken) {
+                return res.status(401).json({ message: 'Access token is required' });
+            }
+    
+            const decoded = jwt.decode(accessToken);
+            if (!decoded || !decoded.exp) {
+                return res.status(401).json({ message: 'Invalid token' });
+            }
+    
+            const isTokenExpired = decoded.exp * 1000 < Date.now();
+            if (isTokenExpired) {
+                console.log('Token expiration check:', isTokenExpired);
+                await prismaClient.user.update({
+                    where: { id: decoded.id },
+                    data: {
+                        isLoggedIn: false,
+                        refreshToken: null,
+                    },
+                });
+                return res.status(401).json({ message: 'Token expired. Please login again.' });
+            }
+    
+            // Attach decoded token to the request for later use
+            req.user = decoded;
+    
+            next(); // Proceed to the next middleware or route handler
+        } catch (error) {
+            console.error('Error in token expiration middleware:', error);
+            return res.status(500).json({ message: 'Internal server error', error: error.message });
+        }
+    };
+
+    module.exports = { protect, verifyRoles, verifyStatus, tokenExpirationMiddleware };

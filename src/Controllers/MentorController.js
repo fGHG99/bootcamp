@@ -2,6 +2,7 @@ const express = require('express');
 const prisma = require('@prisma/client').PrismaClient;
 const { protect } = require('../Middlewares/Auth'); // JWT middleware
 const jwt = require('jsonwebtoken');
+const getUserIdFromToken  = require('../Routes/GetUserId');
 
 const router = express.Router();
 const prismaClient = new prisma();
@@ -256,6 +257,53 @@ router.get('/completion-percentage', verifyMentor, async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: 'Failed to fetch completion percentages.', details: error.message });
+  }
+});
+
+router.get('/notifications', async (req, res) => {
+  const refreshToken = req.headers.refreshToken || req.headers.authorization?.split(" ")[1];
+  const mentorId = getUserIdFromToken(refreshToken);
+
+  try {
+    const notifications = await prismaClient.notification.findMany({
+      where: { userId: mentorId },
+      orderBy: { createdAt: 'desc' },
+    });
+
+    res.status(200).json({ notifications });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to fetch notifications.' });
+  }
+});
+
+// Update a single notification as read
+router.put('/notification/:id/read', async (req, res) => {
+  const { id } = req.params;
+  try {
+    const updatedNotification = await prismaClient.notification.update({
+      where: { id }, // UUID as string
+      data: { isRead: true },
+    });
+    res.status(200).json({ message: 'Notification marked as read.', notification: updatedNotification });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to mark notification as read.', details: error.message });
+  }
+});
+
+// Update all notifications as read
+router.put('/notifications/read-all', async (req, res) => {
+  try {
+    const refreshToken = req.headers.refreshToken || req.headers.authorization?.split(" ")[1];
+    const mentorId = getUserIdFromToken(refreshToken); // Extract mentorId from JWT token (assuming middleware sets req.user)
+
+    const updatedNotifications = await prismaClient.notification.updateMany({
+      where: { userId: mentorId },
+      data: { isRead: true },
+    });
+
+    res.status(200).json({ message: 'All notifications marked as read.', count: updatedNotifications.count });
+  } catch (error) {
+    res.status(500).json({ error: 'Failed to mark all notifications as read.', details: error.message });
   }
 });
 

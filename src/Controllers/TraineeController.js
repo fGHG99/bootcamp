@@ -13,52 +13,54 @@ const router = express.Router();
 const SECRET_KEY = process.env.SECRET;
 const REFRESH_KEY = process.env.REFRESH_SECRET;
 
-// Login Route
 router.post('/login', async (req, res) => {
-    const { email, password, role } = req.body;
+  const { email, password, role } = req.body;
 
-    if (!email || !password || !role) {
-        return res.status(400).json({ message: 'Email, password, and role are required' });
+  if (!email || !password || !role) {
+      return res.status(400).json({ message: 'Email, password, and role are required' });
+  }
+
+  try {
+    const user = await prismaClient.user.findUnique({
+        where: { email },
+    });
+
+    const accessToken = jwt.sign({ id: user.id, role: user.role }, SECRET_KEY, { expiresIn: '30m' });
+    const refreshToken = jwt.sign({ id: user.id, role: user.role }, REFRESH_KEY, { expiresIn: '1y' });
+
+    if (!user) {
+        return res.status(404).json({ message: 'User not found' });
     }
 
-    try {
-        const user = await prismaClient.user.findUnique({
-            where: { email },
-        });
+    if (user.role !== role) {
+        return res.status(403).json({ message: 'Access denied' });
+    }
 
-        if (!user) {
-            return res.status(404).json({ message: 'User not found' });
-        }
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+        return res.status(401).json({ message: 'Username or password is incorrect' });
+    }
 
-        if (user.role !== role) {
-            return res.status(403).json({ message: 'Access denied' });
-        }
-
-        const isPasswordValid = await bcrypt.compare(password, user.password);
-        if (!isPasswordValid) {
-            return res.status(401).json({ message: 'Username or password is incorrect' });
-        }
-
-        const accessToken = jwt.sign({ id: user.id, role: user.role }, SECRET_KEY, { expiresIn: '30m' });
-        const refreshToken = jwt.sign({ id: user.id, role: user.role }, REFRESH_KEY, { expiresIn: '1y' });
-
-        await prismaClient.user.update({
-            where: { email },
-            data: {
-                isLoggedIn: true, 
-                refreshToken,
-            },
-        });
-
-        return res.status(200).json({
-            message: 'Login successful',
-            accessToken,
+    await prismaClient.user.update({
+        where: { id : user.id },
+        data: {
+            isLoggedIn: true,
             refreshToken,
-        });
-    } catch (error) {
-        console.error('Error during login:', error);
-        return res.status(500).json({ message: 'Error during login', error: error.message });
-    }
+        },
+    });
+
+    return res.status(200).json({
+        message: 'Login successful',
+        accessToken,
+        refreshToken,
+    });
+
+} catch (error) {
+    console.error('Error during login:', error);
+    return res.status(500).json({ message: 'Error during login', error: error.message });
+}
+
+  
 });
 
 // Refresh Access Token Route
@@ -210,7 +212,7 @@ router.post('/logout', async (req, res) => {
     const { accessToken } = req.body;
 
     if (!accessToken) {
-        return res.status(400).json({ message: 'Refresh token is required' });
+        return res.status(400).json({ message: 'token is required' });
     }
     
     try {
@@ -229,7 +231,14 @@ router.post('/logout', async (req, res) => {
         console.error('Error during logout:', error);
 
         if (error.name === 'TokenExpiredError') {
-            return res.status(401).json({ message: 'Refresh token already expired' });
+          await prismaClient.user.update({
+            where: { id: decoded.id },
+            data: { 
+                isLoggedIn: false,
+                refreshToken: null 
+            },
+        });
+            return res.status(401).json({ message: 'token already expired' });
         }
 
         return res.status(500).json({ message: 'Error during logout', error: error.message });
@@ -270,6 +279,7 @@ router.get('/:id/pro', async (req, res) => {
 });
 
 router.get('/:id/casual', async (req, res) => {
+
     const { id } = req.params;
 
     try {

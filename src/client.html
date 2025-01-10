@@ -1,0 +1,32 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Socket.IO Test</title>
+  <script src="https://cdn.socket.io/4.6.0/socket.io.min.js"></script>
+</head>
+<body>
+  <h1>Socket.IO Transport Mode Test</h1>
+  <script>
+    // Connect to the Socket.IO server using WebSocket only
+    const socket = io('http://10.10.103.6:4000', {
+      transports: ['websocket'] // Force WebSocket transport
+    });
+
+    // Listen for connection
+    socket.on('connect', () => {
+      console.log('Connected to the server via WebSocket!');
+    });
+
+    // Join a specific room (example: userId room)
+    socket.emit('joinRoom', '320ea5b3-4a5b-4d61-bc62-de1715a71cf8');
+
+    // Listen for real-time notifications
+    socket.on('receiveNotification', (data) => {
+      console.log('Notification received:', data);
+      alert(`New Notification: ${data.title} - ${data.description}`);
+    });
+  </script>
+</body>
+</html>
