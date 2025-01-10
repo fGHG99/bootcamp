@@ -261,8 +261,7 @@ router.get('/completion-percentage', verifyMentor, async (req, res) => {
 });
 
 router.get('/notifications', async (req, res) => {
-  const refreshToken = req.headers.refreshToken || req.headers.authorization?.split(" ")[1];
-  const mentorId = getUserIdFromToken(refreshToken);
+  const { mentorId } = req;
 
   try {
     const notifications = await prismaClient.notification.findMany({
@@ -292,9 +291,9 @@ router.put('/notification/:id/read', async (req, res) => {
 
 // Update all notifications as read
 router.put('/notifications/read-all', async (req, res) => {
+  const { mentorId } = req;
+  
   try {
-    const refreshToken = req.headers.refreshToken || req.headers.authorization?.split(" ")[1];
-    const mentorId = getUserIdFromToken(refreshToken); // Extract mentorId from JWT token (assuming middleware sets req.user)
 
     const updatedNotifications = await prismaClient.notification.updateMany({
       where: { userId: mentorId },
