@@ -1,8 +1,7 @@
 const express = require('express');
 const prisma = require('@prisma/client').PrismaClient;
-const { protect } = require('../Middlewares/Auth'); // JWT middleware
+const { protect, verifyToken } = require('../Middlewares/Auth'); // JWT middleware
 const jwt = require('jsonwebtoken');
-const getUserIdFromToken  = require('../Routes/GetUserId');
 
 const router = express.Router();
 const prismaClient = new prisma();
@@ -303,6 +302,115 @@ router.put('/notifications/read-all', async (req, res) => {
     res.status(200).json({ message: 'All notifications marked as read.', count: updatedNotifications.count });
   } catch (error) {
     res.status(500).json({ error: 'Failed to mark all notifications as read.', details: error.message });
+  }
+});
+
+router.post("/schedule", verifyToken, async (req, res) => {
+  try {
+    const { title, schedule } = req.body;
+
+    // Validate input to avoid invalid characters in JSON data
+    if (!title || !schedule || !Array.isArray(schedule) || schedule.length === 0) {
+      return res.status(400).json({ error: "Invalid input data." });
+    }
+
+    // Check for invalid characters in title and schedule
+    if (/[^\x20-\x7E]/.test(title)) {
+      return res.status(400).json({ error: "Title contains invalid characters." });
+    }
+
+    // Dynamically create schedule with related schedule days
+    const newSchedule = await prismaClient.schedule.create({
+      data: {
+        title,
+        scheduleDays: {
+          create: schedule.map(({ day, date, start, end }) => {
+            if (!start || !end) {
+              throw new Error("Start and end times are required.");
+            }
+            return {
+              day,
+              date: new Date(date),
+              start,
+              end
+            };
+          })
+        },
+        user: {
+          connect: {
+            id: req.userId
+          }
+        }
+      },
+      include: {
+        scheduleDays: true
+      }
+    });
+
+    res.status(201).json(newSchedule);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: error.message || "Failed to create schedule." });
+  }
+});
+
+router.get("/schedule", verifyToken, async (req, res) => {
+  try {
+    const userId = req.userId;
+
+    const schedules = await prismaClient.schedule.findMany({
+      where: { userId },
+      include: { scheduleDays: true },
+    });
+
+    res.status(200).json(schedules);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to fetch schedules." });
+  }
+});
+
+router.put("/schedule/:id", verifyToken, async (req, res) => {
+  try {
+    const userId = req.userId;
+    const scheduleId = req.params.id;
+    const { title, schedule } = req.body;
+
+    if (!title || !schedule || !Array.isArray(schedule)) {
+      return res.status(400).json({ error: "Invalid input data." });
+    }
+
+    // Verify the schedule belongs to the user
+    const existingSchedule = await prismaClient.schedule.findFirst({
+      where: { id: scheduleId, userId },
+    });
+
+    if (!existingSchedule) {
+      return res.status(404).json({ error: "Schedule not found." });
+    }
+
+    // Update the schedule and related schedule days
+    const updatedSchedule = await prismaClient.schedule.update({
+      where: { id: scheduleId },
+      data: {
+        title,
+        scheduleDays: {
+          deleteMany: {}, // Clear existing schedule days
+          create: schedule.map((day) => ({
+            day: day.day,
+            date: new Date(day.date),
+            start: day.hours.start,
+            end: day.hours.end,
+          })),
+        },
+      },
+      include: { scheduleDays: true },
+    });
+
+    res.status(200).json(updatedSchedule);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: "Failed to update schedule." });
   }
 });
 

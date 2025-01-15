@@ -85,6 +85,7 @@ model User {
   notification     Notification[]
   uploadedLessons  Lesson[]    @relation("UploadedLessons") // Bidirectional relation to Lesson
   uploadedChallenges Challenge[] @relation("UploadedChallenges") // Bidirectional relation to Challenge
+  schedule         Schedule[]
 }
 
 model Token {
@@ -240,5 +241,23 @@ model Notification {
   type        String
   createdAt   DateTime @default(now())
   isRead      Boolean  @default(false)
+}
+
+model Schedule {
+  id     String @id @default(uuid())
+  userId String
+  user   User @relation(fields: [userId], references: [id], onDelete: Cascade)
+  title  String @db.VarChar(20)
+  scheduleDays ScheduleDay[]
+}
+
+model ScheduleDay {
+  id        String @id @default(uuid())
+  scheduleId String
+  schedule  Schedule @relation(fields: [scheduleId], references: [id], onDelete: Cascade)
+  day   String @db.VarChar(10) // e.g., "Monday"
+  date  DateTime
+  start String @db.VarChar(5)  // e.g., "09:00"
+  end   String @db.VarChar(5)  // e.g., "17:00"
 }
 

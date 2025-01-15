@@ -41,6 +41,28 @@
         }
     };
 
+    const verifyToken = (req, res, next) => {
+        const authHeader = req.headers.authorization;
+      
+        if (!authHeader || !authHeader.startsWith("Bearer ")) {
+          return res.status(401).json({ error: "Unauthorized" });
+        }
+      
+        const refreshToken = authHeader.split(" ")[1]; // Extract the token from "Bearer <token>"
+      
+        try {
+          // Decoding the token using the secret key (the same secret used to sign the token)
+          const decoded = jwt.verify(refreshToken, process.env.REFRESH_SECRET);
+      
+          // Attach the user 'id' to the request object for later use in your route handlers
+          req.userId = decoded.id; // Use 'id' from the decoded token instead of 'userId'
+          next(); // Proceed to the next middleware or route handler
+        } catch (error) {
+          return res.status(401).json({ error: "Invalid token" });
+        }
+      };
+      
+
     const verifyRoles = (allowedRoles) => {
         return async (req, res, next) => {
         const authHeader = req.headers.authorization;
@@ -144,4 +166,4 @@
         }
     };
 
-    module.exports = { protect, verifyRoles, verifyStatus, tokenExpirationMiddleware };
+    module.exports = { protect, verifyRoles, verifyStatus, tokenExpirationMiddleware, verifyToken };
