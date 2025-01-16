@@ -1,24 +1,22 @@
 const express = require('express');
 const prisma = require('@prisma/client');
+const { Role: RoleEnum } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
 const { verifyRoles } = require('../Middlewares/Auth'); 
-
 
 const { PrismaClient } = prisma;
 const prismaClient = new PrismaClient();
 const router = express.Router();
 
-router.post('/create-user', async (req, res) => {
+router.post('/create-user', verifyRoles(['ADMIN']), async (req, res) => {
   try {
-    const { email, password, role } = req.body;
+    const { email, password, dob, pob, mobile, role } = req.body;
 
-    // Validate inputs
     if (!email || !password || !role) {
       return res.status(400).json({ message: 'Email, password, and role are required.' });
     }
 
-    // Validate role against allowed roles
     const validRoles = ['TRAINEE', 'MENTOR', 'EXAMINER', 'ADMIN'];
     if (!validRoles.includes(role)) {
       return res.status(400).json({
@@ -26,7 +24,6 @@ router.post('/create-user', async (req, res) => {
       });
     }
 
-    // Check if the user already exists
     const existingUser = await prismaClient.user.findUnique({
       where: { email },
     });
@@ -35,10 +32,7 @@ router.post('/create-user', async (req, res) => {
       return res.status(400).json({ message: 'User already exists.' });
     }
 
-    // Hash the password
     const hashedPassword = await bcrypt.hash(password, 10);
-
-    // Generate refresh token
     const refreshToken = jwt.sign(
       {
         email,
@@ -48,17 +42,15 @@ router.post('/create-user', async (req, res) => {
       { expiresIn: '7d' } // Refresh token expires in 7 days
     );
 
-    // Generate access token
     const accessToken = jwt.sign(
       {
         email,
         role,
       },
       process.env.SECRET, // Add your access token secret in the `.env` file
-      { expiresIn: '15m' } // Access token expires in 15 minutes
+      { expiresIn: '30m' } // Access token expires in 15 minutes
     );
 
-    // Create the user and save refreshToken
     const newUser = await prismaClient.user.create({
       data: {
         email,
@@ -67,10 +59,10 @@ router.post('/create-user', async (req, res) => {
         userstatus: 'UNVERIFIED',
         fullName: null,
         nickname: null,
-        pob: null,
-        dob: null,
+        pob,
+        dob: new Date(dob),
         address: null,
-        mobile: null,
+        mobile,
         lastEdu: null,
         lastEduInst: null,
         major: null,
@@ -92,8 +84,12 @@ router.post('/create-user', async (req, res) => {
       select: {
         id: true,
         email: true,
+        fullName: true,
         role: true,
-        userstatus: true,
+        dob: true,
+        pob: true,
+        mobile: true,
+        userstatus: true
       },
     });
 
@@ -359,7 +355,7 @@ router.post('/challenge', verifyRoles(['ADMIN']), async (req, res) => {
 });
 
 // Get a lesson's details
-router.get('/:lessonId', async (req, res) => {
+router.get('/lesson/:lessonId', async (req, res) => {
   try {
     const { lessonId } = req.params;
 
@@ -454,6 +450,53 @@ router.get("/users/:role", async (req, res) => {
           }
         },
         isLoggedIn: true,
+      },
+    });
+
+    res.json(users);
+  } catch (error) {
+    res.status(500).json({ error: "Failed to fetch users" });
+  }
+});
+
+router.get("/users", async (req, res) => {
+  try {
+
+    // Fetch users based on the role
+    const users = await prismaClient.user.findMany({
+      select: {
+        id: true,
+        fullName: true,
+        nickname: true,
+        github: true, 
+        address: true,
+        mobile: true,
+        email: true,
+        confident: true,
+        certificates: {
+          select: {
+            id: true,
+            traineeId: true,
+            issuedAt: true,
+          },
+        },
+        classes: {
+          select: {
+            id: true,
+            className: true,
+            createdAt: true,
+          },
+        },
+        batches: {
+          select: {
+            id: true,
+            batchNum: true,
+            batchClass: true,
+            batchTitle: true,
+          }
+        },
+        isLoggedIn: true,
+        userstatus: true,
       },
     });
 
@@ -630,4 +673,28 @@ router.put('/batch/:id/participants', async (req, res) => {
   }
 });
 
+router.get('/role/roles', async (req, res) => {
+  try {
+      // Fetch enum roles
+      const enumRoles = Object.values(RoleEnum);
+
+      // Fetch roles from the database table
+      const tableRoles = await prismaClient.roles.findMany({
+          select: { name: true }
+      });
+
+      // If the table has roles, map them, otherwise return an empty array
+      const tableRoleNames = tableRoles.length > 0 
+          ? tableRoles.map(role => role.name) 
+          : [];
+
+      // Merge enum roles and table roles, removing duplicates using Set
+      const mergedRoles = [...new Set([...enumRoles, ...tableRoleNames])];
+
+      res.status(200).json({ roles: mergedRoles });
+  } catch (error) {
+      console.error('Error fetching roles:', error);
+      res.status(500).json({ error: "Failed to fetch roles" });
+  }
+});
 module.exports = router;

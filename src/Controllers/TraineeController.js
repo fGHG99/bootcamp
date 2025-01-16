@@ -100,7 +100,7 @@ router.post('/refresh-token', async (req, res) => {
 });
     
 // Submit Verification Form Route
-router.post('/verify',protect, async (req, res) => {
+router.put('/verify',protect, async (req, res) => {
     const { id } = req.user;
     const {
         fullName,

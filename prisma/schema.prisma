@@ -88,6 +88,11 @@ model User {
   schedule         Schedule[]
 }
 
+model Roles {
+  id Int @id @default(autoincrement())
+  name String @unique
+}
+
 model Token {
   id     String @id @default(uuid())
   token  String @db.Text
