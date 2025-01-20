@@ -103,16 +103,15 @@ model Token {
 model Batch {
   id           String    @id @default(uuid())
   batchNum     Int       @unique
-  batchClass   String    @db.VarChar(50)
   batchTitle   String?   @db.VarChar(50)
   batchDesc    String?   @db.VarChar(100)
   mentors      User[]    @relation("BatchMentors")
   startDate    DateTime
-  endDate      DateTime
+  endDate      DateTime?
   participants User[]    @relation("BatchParticipants")
   status       Status
   challenges   Challenge[]
-  classes      Class[]   @relation("BatchClasses")
+  classes      BatchClass[]
   lessons      Lesson[]  @relation("BatchLessons")
   certificates Certificate[]
 }
@@ -121,15 +120,23 @@ model Class {
   id          String      @id @default(uuid())
   className   String      @db.Text
   createdAt   DateTime
-  participant Int         @default(0) // This will now reflect the count of users joined
-  batch       Batch       @relation("BatchClasses", fields: [batchId], references: [id])
-  batchId     String
+  participant Int         @default(0) 
+  batches     BatchClass[]
   challenges  Challenge[]
   lessons     Lesson[]    @relation("ClassLessons")
   certificates Certificate[]
   status      Status      @default(Tba)
   users       User[]      @relation("UserClasses")
   mentors     User[]      @relation("ClassMentors")
+}
+
+model BatchClass {
+  id       String  @id @default(cuid())
+  batchId  String
+  classId  String
+  batch    Batch   @relation(fields: [batchId], references: [id], onDelete: Cascade)
+  class    Class   @relation(fields: [classId], references: [id], onDelete: Cascade)
+  @@unique([batchId, classId]) 
 }
 
 model Challenge {

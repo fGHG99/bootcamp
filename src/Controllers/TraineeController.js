@@ -421,6 +421,67 @@ router.get('/:id/certificate', async (req, res) => {
     }
   });
 
+// Get all certificates
+router.get("/certificates", async (req, res) => {
+  try {
+    const certificates = await prismaClient.certificate.findMany({
+      include: {
+        trainee: {
+          select: { fullName: true },
+        },
+        class: {
+          select: { className: true },
+        },
+        batch: {
+          select: { 
+            batchNum: true,
+            batchTitle: true, 
+          },
+        },
+      },
+    });
+
+    res.status(200).json(certificates);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error.", error: error.message });
+  }
+});
+
+// Get certificate by ID
+router.get("/certificates/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const certificate = await prismaClient.certificate.findUnique({
+      where: { id },
+      include: {
+        trainee: {
+          select: { fullName: true },
+        },
+        class: {
+          select: { className: true },
+        },
+        batch: {
+          select: { 
+            batchNum: true,
+            batchTitle: true, 
+          },
+        },
+      },
+    });
+
+    if (!certificate) {
+      return res.status(404).json({ message: "Certificate not found." });
+    }
+
+    res.status(200).json(certificate);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: "Internal server error.", error: error.message });
+  }
+});
+
 // Middleware to extract userId from refreshToke
 const getUserId = async (req, res, next) => {
     try {
@@ -497,5 +558,38 @@ router.get("/lessons", getUserId, async (req, res) => {
       res.status(500).json({ error: "Failed to fetch lessons.", details: error.message });
     }
 });
+
+router.get('/:userId/cb', async (req, res) => {
+  const { userId } = req.params;
+
+  try {
+    // Fetch the classes and batches associated with the userId
+    const user = await prismaClient.user.findUnique({
+      where: { id: userId },
+      include: {
+        classes: true, // Include related classes
+        batches: true, // Include related batches (ensure your schema supports this)
+      },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: 'User not found.' });
+    }
+
+    // Extract classes and batches
+    const { classes, batches } = user;
+
+    // Return the classes and batches
+    return res.status(200).json({
+      userId,
+      classes,
+      batches,
+    });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'An error occurred while fetching classes and batches.' });
+  }
+});
+
 
 module.exports = router;

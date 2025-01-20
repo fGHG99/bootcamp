@@ -107,18 +107,36 @@ router.post('/create-user', verifyRoles(['ADMIN']), async (req, res) => {
   }
 });
 
-router.post('/class', verifyRoles(['ADMIN']), async (req, res) => {
+router.post('/class', async (req, res) => {
   try {
-    const { className, batchId, participant } = req.body;
+    const { className, participant, batchId } = req.body;
 
+    // Create the new class and link it to the provided batches
     const classData = await prismaClient.class.create({
       data: {
         className,
         participant,
-        batchId,
         createdAt: new Date(),
+        batches: {
+          create: batchId.map((batchId) => ({ batchId })),
+        },
+      },
+      include: {
+        batches: {
+          include: {
+            batch: {
+              select: {
+                batchNum: true,
+                batchTitle: true,
+                batchDesc: true,
+                status: true,
+              },
+            },
+          },
+        },
       },
     });
+
     res.status(201).json(classData);
   } catch (error) {
     res.status(500).json({ error: error.message });
@@ -131,23 +149,26 @@ router.get('/class', async (req, res) => {
       select: {
         id: true,
         className: true,
-        participant: true, // The count of participants
-        batchId: true,
-        batch: {
-          select: {
-            id: true,
-            batchNum: true,
-            batchClass: true,
-            batchTitle: true,
+        participant: 0,
+        createdAt: true,
+        status: true,
+        batches: {
+          include: {
+            batch: {
+              select: {
+                batchNum: true,
+                batchTitle: true,
+              },
+            },
           },
-        }, // Fetch related batch details
+        },
         mentors: {
           select: {
             id: true,
             fullName: true,
             email: true,
           },
-        }, 
+        },
         users: {
           select: {
             id: true,
@@ -158,10 +179,8 @@ router.get('/class', async (req, res) => {
         challenges: true,
         lessons: true,
         certificates: true,
-        status: true,
       },
     });
-    
 
     res.status(200).json(classes);
   } catch (error) {
@@ -218,66 +237,68 @@ router.put('/class/:id', async (req, res) => {
 
 router.post('/batch', async (req, res) => {
   try {
-    const { batchNum, batchClass, batchTitle, batchDesc, mentorIds, startDate, endDate, status } = req.body;
+    const { batchNum, batchClass, batchTitle, batchDesc, mentorIds, startDate, endDate } = req.body;
 
+    const existingBatch = await prismaClient.batch.findUnique({
+      where: { batchNum },
+    });
+
+    // If the batchNum is already taken, send an error response
+    if (existingBatch) {
+      return res.status(400).json({ error: 'Batch number already taken' });
+    }
+
+    // Fetch mentors' email, fullName, and role based on mentorIds
+    const mentors = await prismaClient.user.findMany({
+      where: {
+        id: {
+          in: mentorIds,
+        },
+      },
+      select: {
+        id: true, // Keep the mentor's id to connect them to the batch
+        email: true,
+        fullName: true,
+        role: true,
+      },
+    });
+
+    // If mentors are not found, send an error
+    if (!mentors.length) {
+      return res.status(404).json({ error: 'Mentors not found' });
+    }
+
+    // Create the batch and connect mentors by their IDs
     const batch = await prismaClient.batch.create({
       data: {
         batchNum,
-        batchClass,
+        classes: {
+          create: batchClass.map((classId) => ({ classId })), // Connect existing classes by their IDs
+         },
         batchTitle,
         batchDesc,
         startDate: new Date(startDate),
-        endDate: new Date(endDate),
-        status,
+        endDate: endDate ? new Date(endDate) : null, // Make sure endDate can be null
+        status: 'Tba',
         mentors: {
-          connect: mentorIds.map((id) => ({ id })), // Connect existing mentors
+          connect: mentorIds.map((id) => ({ id })), // Connect existing mentors by their IDs
         },
       },
     });
 
-    res.status(201).json(batch);
+    // Return the batch along with the selected mentor data
+    res.status(201).json({
+      ...batch,
+      mentors, // Add mentor data to the response (email, fullName, role)
+    });
   } catch (error) {
     res.status(500).json({ error: error.message });
+    console.log({error: error.message});
   }
 });
 
-
 router.get('/batch', async (req, res) => {
-  try {
-    const { id } = req.query;
-
-    if (id) {
-      // Fetch a specific batch by ID, including associated mentors, participants, classes, etc.
-      const batch = await prismaClient.batch.findUnique({
-        where: { id },
-        include: {
-          mentors: {
-            select: {
-              id: true,
-              fullName: true,
-              nickname: true,
-            },
-          },
-          participants : {
-            select: {
-              id: true,
-              fullName: true,
-              nickname: true,
-            },
-          },   // Include participant details
-          classes: true,        // Include class details
-          challenges: true,     // Include challenge details
-          lessons: true,        // Include lesson details
-          certificates: true,   // Include certificate details
-        },
-      });
-
-      if (!batch) {
-        return res.status(404).json({ error: 'Batch not found' });
-      }
-
-      return res.status(200).json(batch);
-    } else {
+  try {{
       // Fetch all batches, including associated mentors, participants, classes, etc.
       const batches = await prismaClient.batch.findMany({
         include: {
@@ -294,10 +315,29 @@ router.get('/batch', async (req, res) => {
               fullName: true,
               nickname: true,
             },
-          },  
-          classes: true,
-          challenges: true,
-          lessons: true,
+          },
+          classes: {
+            include: {
+              class: {
+                select: {
+                  id: true,
+                  className: true,
+                  mentors: {
+                    select: {
+                      id: true,
+                      fullName: true,
+                    },
+                  },
+                  users: {
+                    select: {
+                      id: true,
+                      fullName: true,
+                    },
+                  },
+                },
+              },
+            },
+          },
           certificates: true,
         },
       });
@@ -308,7 +348,6 @@ router.get('/batch', async (req, res) => {
     res.status(500).json({ error: error.message });
   }
 });
-
 
 router.get('/batchs/:id', async (req, res) => {
   try {
@@ -445,7 +484,6 @@ router.get("/users/:role", async (req, res) => {
           select: {
             id: true,
             batchNum: true,
-            batchClass: true,
             batchTitle: true,
           }
         },
@@ -472,6 +510,7 @@ router.get("/users", async (req, res) => {
         address: true,
         mobile: true,
         email: true,
+        role: true,
         confident: true,
         certificates: {
           select: {
@@ -491,7 +530,6 @@ router.get("/users", async (req, res) => {
           select: {
             id: true,
             batchNum: true,
-            batchClass: true,
             batchTitle: true,
           }
         },
@@ -503,6 +541,7 @@ router.get("/users", async (req, res) => {
     res.json(users);
   } catch (error) {
     res.status(500).json({ error: "Failed to fetch users" });
+    console.log(error)
   }
 });
 
