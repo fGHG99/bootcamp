@@ -190,7 +190,6 @@ router.post('/challenge', async (req, res) => {
   }
 });
 
-
 // Get completion percentages for lessons and challenges
 router.get('/percentage', async (req, res) => {
   const { userId } = req.query;

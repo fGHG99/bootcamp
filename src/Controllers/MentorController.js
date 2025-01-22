@@ -32,8 +32,8 @@ router.post('/note/add', protect, async (req, res) => {
   }
 });
 
-//router to get notes based on visibility 
-router.get('/notes/:graderId/:visibility?', protect, async (req, res) => {
+//router to get notes based on visibility OR BASED ON GRADER
+router.get('/notes/:graderId/:visibility?', protect,  async (req, res) => {
   const { graderId, visibility } = req.params;
   const { role } = req.user; // User information from JWT middleware
 
@@ -85,7 +85,7 @@ router.get('/notes/:graderId/:visibility?', protect, async (req, res) => {
 });
 
 //router to get note for specific trainee only
-router.get('/note/list/:traineeId', protect, async (req, res) => {
+router.get('/note/list/trainee/:traineeId', protect, async (req, res) => {
     const { traineeId } = req.params;
     const { role, userId } = req.user; // User information from JWT middleware
   
@@ -259,12 +259,12 @@ router.get('/completion-percentage', verifyMentor, async (req, res) => {
   }
 });
 
-router.get('/notifications', async (req, res) => {
-  const { mentorId } = req;
+router.get('/notifications', verifyToken, async (req, res) => {
+  const { userId } = req; // Assuming `userId` is set in the request after verifying the token
 
   try {
     const notifications = await prismaClient.notification.findMany({
-      where: { userId: mentorId },
+      where: { userId },
       orderBy: { createdAt: 'desc' },
     });
 

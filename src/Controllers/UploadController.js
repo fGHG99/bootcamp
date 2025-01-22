@@ -294,14 +294,39 @@ const certificateUpload = multer({
 
 router.post("/certificate", certificateUpload.single("certificate"), async (req, res) => {
   const { traineeId, classId, batchId } = req.body;
-  const certificates = req.file;
 
   if (!req.file) {
     return res.status(400).json({ message: "No file uploaded." });
   }
 
   try {
+    // Validate traineeId
+    const traineeExists = await prisma.user.findUnique({
+      where: { id: traineeId },
+    });
+    if (!traineeExists) {
+      return res.status(400).json({ message: "Invalid traineeId." });
+    }
+
+    // Validate classId
+    const classExists = await prisma.class.findUnique({
+      where: { id: classId },
+    });
+    if (!classExists) {
+      return res.status(400).json({ message: "Invalid classId." });
+    }
+
+    // Validate batchId
+    const batchExists = await prisma.batch.findUnique({
+      where: { id: batchId },
+    });
+    if (!batchExists) {
+      return res.status(400).json({ message: "Invalid batchId." });
+    }
+
+    // Proceed with certificate creation
     const filepath = `public/certificate/${req.file.filename}`;
+    const certificates = req.file;
 
     const certificate = await prisma.certificate.create({
       data: {
@@ -321,8 +346,11 @@ router.post("/certificate", certificateUpload.single("certificate"), async (req,
       certificate,
     });
   } catch (error) {
-    console.error(error);
-    res.status(500).json({ message: 'Internal server error.', error: error.message });
+    console.error("Error while creating certificate:", error);
+    res.status(500).json({
+      message: "Internal server error.",
+      error: error.message,
+    });
   }
 });
 

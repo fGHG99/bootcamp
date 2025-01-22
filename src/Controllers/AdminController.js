@@ -3,7 +3,8 @@ const prisma = require('@prisma/client');
 const { Role: RoleEnum } = require('@prisma/client');
 const bcrypt = require('bcrypt');
 const jwt = require('jsonwebtoken');
-const { verifyRoles } = require('../Middlewares/Auth'); 
+const { verifyRoles, verifyToken } = require('../Middlewares/Auth'); 
+const socket = require('./SocketHandler');
 
 const { PrismaClient } = prisma;
 const prismaClient = new PrismaClient();
@@ -107,7 +108,8 @@ router.post('/create-user', verifyRoles(['ADMIN']), async (req, res) => {
   }
 });
 
-router.post('/class', async (req, res) => {
+router.post('/class', verifyToken, async (req, res) => {
+  const { userId } = req
   try {
     const { className, participant, batchId } = req.body;
 
@@ -136,6 +138,31 @@ router.post('/class', async (req, res) => {
         },
       },
     });
+
+    const notifyAdmin = async (userId) => {
+      // Create a notification for the mentor
+      const AdminNotification = await prismaClient.notification.create({
+        data: {
+          userId: userId,
+          title: 'Created class!',
+          description: 'You have successfully created a new class.',
+          type: 'class',
+        },
+      });
+      console.log('Admin Notification Created', AdminNotification);
+
+      // Emit notification to the mentor
+      const io = socket.getIO();
+      io.to(userId).emit('receiveNotification', {
+        id: AdminNotification.id,
+        title: AdminNotification.title,
+        description: AdminNotification.description,
+        type: AdminNotification.type,
+        createdAt: AdminNotification.createdAt,
+      });
+    };
+
+    await notifyAdmin(userId);
 
     res.status(201).json(classData);
   } catch (error) {
@@ -466,6 +493,7 @@ router.get("/users/:role", async (req, res) => {
         mobile: true,
         email: true,
         confident: true,
+        role: true,
         certificates: {
           select: {
             id: true,
