@@ -10,7 +10,8 @@ const { PrismaClient } = prisma;
 const prismaClient = new PrismaClient();
 const router = express.Router();
 
-router.post('/create-user', verifyRoles(['ADMIN']), async (req, res) => {
+router.post('/create-user', verifyToken, verifyRoles(['ADMIN']), async (req, res) => {
+  const { userId } = req;
   try {
     const { email, password, dob, pob, mobile, role } = req.body;
 
@@ -94,59 +95,14 @@ router.post('/create-user', verifyRoles(['ADMIN']), async (req, res) => {
       },
     });
 
-    res.status(201).json({
-      message: 'User created successfully.',
-      user: newUser,
-      tokens: {
-        accessToken,
-        refreshToken,
-      },
-    });
-  } catch (error) {
-    console.error('Error creating user:', error);
-    res.status(500).json({ message: 'An error occurred while creating the user.' });
-  }
-});
-
-router.post('/class', verifyToken, async (req, res) => {
-  const { userId } = req
-  try {
-    const { className, participant, batchId } = req.body;
-
-    // Create the new class and link it to the provided batches
-    const classData = await prismaClient.class.create({
-      data: {
-        className,
-        participant,
-        createdAt: new Date(),
-        batches: {
-          create: batchId.map((batchId) => ({ batchId })),
-        },
-      },
-      include: {
-        batches: {
-          include: {
-            batch: {
-              select: {
-                batchNum: true,
-                batchTitle: true,
-                batchDesc: true,
-                status: true,
-              },
-            },
-          },
-        },
-      },
-    });
-
     const notifyAdmin = async (userId) => {
       // Create a notification for the mentor
       const AdminNotification = await prismaClient.notification.create({
         data: {
           userId: userId,
-          title: 'Created class!',
-          description: 'You have successfully created a new class.',
-          type: 'class',
+          title: 'User Created!',
+          description: 'You have successfully created new user.',
+          type: 'User',
         },
       });
       console.log('Admin Notification Created', AdminNotification);
@@ -164,8 +120,91 @@ router.post('/class', verifyToken, async (req, res) => {
 
     await notifyAdmin(userId);
 
+    res.status(201).json({
+      message: 'User created successfully.',
+      user: newUser,
+      tokens: {
+        accessToken,
+        refreshToken,
+      },
+    });
+  } catch (error) {
+    console.error('Error creating user:', error);
+    res.status(500).json({ message: 'An error occurred while creating the user.' });
+  }
+});
+
+router.post('/class', verifyToken, async (req, res) => {
+  const { userId } = req; // Extracting userId from the token
+  try {
+    const { className, batchId, mentors, users } = req.body;
+    const participant = users.length;
+
+    // Create the new class and link it to the provided batches, mentors, and users
+    const classData = await prismaClient.class.create({
+      data: {
+        className,
+        participant,
+        createdAt: new Date(),
+        batches: {
+          create: batchId.map((batchId) => ({ batchId })),
+        },
+        mentors: {
+          connect: mentors.map((mentorId) => ({ id: mentorId })), // Assign mentors by connecting existing users
+        },
+        users: {
+          connect: users.map((userId) => ({ id: userId })), // Assign participants by connecting existing users
+        },
+      },
+      include: {
+        batches: {
+          include: {
+            batch: {
+              select: {
+                batchNum: true,
+                batchTitle: true,
+                batchDesc: true,
+                status: true,
+              },
+            },
+          },
+        },
+        mentors: {
+          select: { id: true, fullName: true, email: true }, // Include mentor details
+        },
+        users: {
+          select: { id: true, fullName: true, email: true }, // Include participant details
+        },
+      },
+    });
+
+    // Notify admin about the created class
+    const notifyAdmin = async (userId) => {
+      const AdminNotification = await prismaClient.notification.create({
+        data: {
+          userId: userId,
+          title: 'Created class!',
+          description: 'You have successfully created a new class.',
+          type: 'class',
+        },
+      });
+
+      // Emit the notification to the admin
+      const io = socket.getIO();
+      io.to(userId).emit('receiveNotification', {
+        id: AdminNotification.id,
+        title: AdminNotification.title,
+        description: AdminNotification.description,
+        type: AdminNotification.type,
+        createdAt: AdminNotification.createdAt,
+      });
+    };
+
+    await notifyAdmin(userId);
+
     res.status(201).json(classData);
   } catch (error) {
+    console.error('Error creating class:', error);
     res.status(500).json({ error: error.message });
   }
 });
@@ -215,16 +254,19 @@ router.get('/class', async (req, res) => {
   }
 });
 
-//router to assign mentor to classes
+//router to assign mentor and participants
 router.put('/class/:id', async (req, res) => {
   const { id } = req.params;
-  const { className, mentors } = req.body;
+  const { className, mentors, users } = req.body;
 
   try {
     // Pastikan kelas dengan ID yang diberikan ada
     const existingClass = await prismaClient.class.findUnique({
       where: { id },
-      include: { mentors: true }, // Sertakan relasi mentors untuk validasi
+      include: { 
+        mentors: true,
+        users: true, 
+      }, // Sertakan relasi mentors untuk validasi
     });
 
     if (!existingClass) {
@@ -244,6 +286,12 @@ router.put('/class/:id', async (req, res) => {
       };
     }
 
+    if (users !== undefined) {
+      updateData.users = {
+        set: users.map((userId) => ({ id: userId })), // Perbarui mentors jika diberikan
+      };
+    }
+
     // Lakukan pembaruan
     const updatedClass = await prismaClient.class.update({
       where: { id },
@@ -252,6 +300,9 @@ router.put('/class/:id', async (req, res) => {
         mentors: {
           select: { id: true, fullName: true, email: true },
         },
+        users: {
+          select : { id: true, fullName: true, email: true },
+        }
       },
     });
 
@@ -262,20 +313,30 @@ router.put('/class/:id', async (req, res) => {
   }
 });
 
-router.post('/batch', async (req, res) => {
+router.post('/batch', verifyRoles(['ADMIN']), verifyToken, async (req, res) => {
+  const { userId } = req; // Authenticated user's ID
   try {
-    const { batchNum, batchClass, batchTitle, batchDesc, mentorIds, startDate, endDate } = req.body;
+    const {
+      batchNum,
+      batchClass,
+      batchTitle,
+      batchDesc,
+      mentorIds,
+      participantIds, // New field for participants
+      startDate,
+      endDate,
+    } = req.body;
 
+    // Check if the batch number already exists
     const existingBatch = await prismaClient.batch.findUnique({
       where: { batchNum },
     });
 
-    // If the batchNum is already taken, send an error response
     if (existingBatch) {
       return res.status(400).json({ error: 'Batch number already taken' });
     }
 
-    // Fetch mentors' email, fullName, and role based on mentorIds
+    // Fetch mentors based on mentorIds
     const mentors = await prismaClient.user.findMany({
       where: {
         id: {
@@ -283,44 +344,91 @@ router.post('/batch', async (req, res) => {
         },
       },
       select: {
-        id: true, // Keep the mentor's id to connect them to the batch
+        id: true, // Mentor's ID to connect to the batch
         email: true,
         fullName: true,
         role: true,
       },
     });
 
-    // If mentors are not found, send an error
     if (!mentors.length) {
       return res.status(404).json({ error: 'Mentors not found' });
     }
 
-    // Create the batch and connect mentors by their IDs
+    // Fetch participants based on participantIds
+    const participants = await prismaClient.user.findMany({
+      where: {
+        id: {
+          in: participantIds,
+        },
+      },
+      select: {
+        id: true, // Participant's ID to connect to the batch
+        email: true,
+        fullName: true,
+        role: true,
+      },
+    });
+
+    if (!participants.length) {
+      return res.status(404).json({ error: 'Participants not found' });
+    }
+
+    // Create the batch with mentors and participants
     const batch = await prismaClient.batch.create({
       data: {
         batchNum,
         classes: {
           create: batchClass.map((classId) => ({ classId })), // Connect existing classes by their IDs
-         },
+        },
         batchTitle,
         batchDesc,
         startDate: new Date(startDate),
-        endDate: endDate ? new Date(endDate) : null, // Make sure endDate can be null
+        endDate: endDate ? new Date(endDate) : null,
         status: 'Tba',
         mentors: {
-          connect: mentorIds.map((id) => ({ id })), // Connect existing mentors by their IDs
+          connect: mentorIds.map((id) => ({ id })), // Connect mentors by their IDs
+        },
+        participants: {
+          connect: participantIds.map((id) => ({ id })), // Connect participants by their IDs
         },
       },
     });
 
-    // Return the batch along with the selected mentor data
+    const notifyAdmin = async (userId) => {
+      const AdminNotification = await prismaClient.notification.create({
+        data: {
+          userId: userId,
+          title: 'Batch Created!',
+          description: 'You have successfully created a new Batch.',
+          type: 'Batch',
+        },
+      });
+
+      console.log('Admin Notification Created', AdminNotification);
+
+      // Emit notification to the admin
+      const io = socket.getIO();
+      io.to(userId).emit('receiveNotification', {
+        id: AdminNotification.id,
+        title: AdminNotification.title,
+        description: AdminNotification.description,
+        type: AdminNotification.type,
+        createdAt: AdminNotification.createdAt,
+      });
+    };
+
+    await notifyAdmin(userId);
+
+    // Return the batch along with mentor and participant data
     res.status(201).json({
       ...batch,
-      mentors, // Add mentor data to the response (email, fullName, role)
+      mentors,
+      participants, // Add participant data to the response (email, fullName, role)
     });
   } catch (error) {
+    console.error({ error: error.message });
     res.status(500).json({ error: error.message });
-    console.log({error: error.message});
   }
 });
 
@@ -573,6 +681,20 @@ router.get("/users", async (req, res) => {
   }
 });
 
+router.delete('/user/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const user = await prismaClient.user.delete({
+      where: { id },
+    });
+
+    res.status(200).json(user);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 //router to get user based on class
 router.get('/class/:classId', async (req, res) => {
   const { classId } = req.params;
@@ -658,48 +780,7 @@ router.get('/batch/:mentorId', async (req, res) => {
 //router to assign mentors to a batch
 router.put('/batch/:id', async (req, res) => {
   const { id } = req.params;
-  const { batchNum, batchClass, batchTitle, mentors } = req.body;
-
-  try {
-    // Pastikan batch dengan ID yang diberikan ada
-    const existingBatch = await prismaClient.batch.findUnique({ where: { id } });
-    if (!existingBatch) {
-      return res.status(404).json({ error: 'Batch not found' });
-    }
-
-    // Bangun data pembaruan secara dinamis
-    const updateData = {};
-    if (batchNum !== undefined) updateData.batchNum = batchNum;
-    if (batchClass !== undefined) updateData.batchClass = batchClass;
-    if (batchTitle !== undefined) updateData.batchTitle = batchTitle;
-    if (mentors !== undefined) {
-      updateData.mentors = {
-        set: mentors.map((mentorId) => ({ id: mentorId })), // Perbarui mentor jika diberikan
-      };
-    }
-
-    // Lakukan pembaruan
-    const updatedBatch = await prismaClient.batch.update({
-      where: { id },
-      data: updateData,
-      include: {
-        mentors: {
-          select: { id: true, fullName: true, email: true },
-        },
-      },
-    });
-
-    res.status(200).json(updatedBatch);
-  } catch (error) {
-    console.error('Error updating batch:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
-});
-
-//router to assign participants to a batch
-router.put('/batch/:id/participants', async (req, res) => {
-  const { id } = req.params;
-  const { participants } = req.body; // Expect an array of participant IDs
+  const { batchNum, classes, batchTitle, mentors, participants } = req.body;
 
   try {
     // Ensure the batch with the given ID exists
@@ -708,37 +789,104 @@ router.put('/batch/:id/participants', async (req, res) => {
       return res.status(404).json({ error: 'Batch not found' });
     }
 
-    // Build update data dynamically for participants
+    // Build update data dynamically
     const updateData = {};
+    if (batchNum !== undefined) updateData.batchNum = batchNum;
+    if (classes !== undefined) updateData.classes = classes; // Modify classes if provided
+    if (batchTitle !== undefined) updateData.batchTitle = batchTitle; // Modify title if provided
+    if (mentors !== undefined) {
+      updateData.mentors = {
+        set: mentors.map((mentorId) => ({ id: mentorId })), // Replace mentors if provided
+      };
+    }
     if (participants !== undefined) {
       updateData.participants = {
-        set: participants.map((participantId) => ({ id: participantId })), // Update participants
+        set: participants.map((userId) => ({ id: userId })), // Replace participants if provided
       };
     }
 
-    // Perform the update without requiring other fields
+    // Perform the update with the dynamic data
     const updatedBatch = await prismaClient.batch.update({
       where: { id },
       data: updateData,
       include: {
-        participants: {
-          select: { id: true, fullName: true, email: true }, // Customize fields as needed
+        mentors: {
+          select: { id: true, fullName: true, email: true },
         },
-        // Include other relationships as necessary
-        mentors: { select: { id: true, fullName: true, email: true } },
-        // classes: true,
-        // challenges: true,
-        // lessons: true,
-        // certificates: true,
+        participants: {
+          select: { id: true, fullName: true, email: true },
+        },
+        classes: {
+          include: {
+            class: {
+              select: {
+                id: true,
+                className: true,
+                participant: true,
+              },
+            },
+          },
+        },
       },
     });
 
     res.status(200).json(updatedBatch);
   } catch (error) {
-    console.error('Error updating participants:', error);
+    console.error('Error updating batch:', error);
     res.status(500).json({ error: 'Internal Server Error' });
   }
 });
+//   const { id } = req.params;
+//   const { batchNum, batchClass, batchTitle, mentors, participants } = req.body; // Include participants in the request body
+
+//   try {
+//     // Ensure the batch with the given ID exists
+//     const existingBatch = await prismaClient.batch.findUnique({ where: { id } });
+//     if (!existingBatch) {
+//       return res.status(404).json({ error: 'Batch not found' });
+//     }
+
+//     // Build dynamic update data
+//     const updateData = {};
+//     if (batchNum !== undefined) updateData.batchNum = batchNum;
+//     if (batchClass !== undefined) updateData.batchClass = batchClass;
+//     if (batchTitle !== undefined) updateData.batchTitle = batchTitle;
+//     if (mentors !== undefined) {
+//       updateData.mentors = {
+//         set: mentors.map((mentorId) => ({ id: mentorId })), // Update mentors if provided
+//       };
+//     }
+//     if (participants !== undefined) {
+//       updateData.participants = {
+//         set: participants.map((participantId) => ({ id: participantId })), // Update participants if provided
+//       };
+//     }
+
+//     // Perform the update
+//     const updatedBatch = await prismaClient.batch.update({
+//       where: { id },
+//       data: updateData,
+//       include: {
+//         mentors: {
+//           select: { id: true, fullName: true, email: true },
+//         },
+//         participants: {
+//           select: { id: true, fullName: true, email: true }, // Include participant details
+//         },
+//         // Include other relationships as necessary
+//         // classes: true,
+//         // challenges: true,
+//         // lessons: true,
+//         // certificates: true,
+//       },
+//     });
+
+//     res.status(200).json(updatedBatch);
+//   } catch (error) {
+//     console.error('Error updating batch:', error);
+//     res.status(500).json({ error: 'Internal Server Error' });
+//   }
+// });
 
 router.get('/role/roles', async (req, res) => {
   try {
@@ -764,4 +912,5 @@ router.get('/role/roles', async (req, res) => {
       res.status(500).json({ error: "Failed to fetch roles" });
   }
 });
+
 module.exports = router;

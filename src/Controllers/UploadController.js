@@ -2,6 +2,7 @@ const express = require("express");
 const multer = require("multer");
 const { PrismaClient } = require("@prisma/client");
 const fs = require("fs");
+const { verifyToken, verifyRoles } = require("../Middlewares/Auth");
 const router = express.Router();
 const prisma = new PrismaClient();
 
@@ -148,8 +149,8 @@ const lessonUpload = multer({
 });
 
 // Lesson creation endpoint
-router.post("/lesson", lessonUpload.array("files", 3), async (req, res) => {
-  const { title, description, deadline, classId, batchId } = req.body;
+router.post("/lesson", lessonUpload.array("files", 3), verifyToken , verifyRoles(['MENTOR']), async (req, res) => {
+  const { title, description, deadline, classId, batchId, mentorId } = req.body;
   const { files } = req;
 
   if (!title || !description || !deadline || !classId || !batchId) {
@@ -166,8 +167,15 @@ router.post("/lesson", lessonUpload.array("files", 3), async (req, res) => {
         title,
         description,
         deadline: new Date(deadline),
-        classId,
-        batchId,
+        class : {
+          connect : { id : classId}
+        },
+        batch : {
+          connect : { id : batchId}
+        },
+        mentor : {
+          connect: { id : mentorId}
+        }
       },
     });
 
@@ -194,6 +202,7 @@ router.post("/lesson", lessonUpload.array("files", 3), async (req, res) => {
     });
   } catch (error) {
     res.status(500).json({ error: "Failed to create lesson and upload files.", details: error.message });
+    console.log(error);
   }
 });
 

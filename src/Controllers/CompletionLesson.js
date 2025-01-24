@@ -9,6 +9,12 @@ const router = express.Router();
 // Mark a lesson as completed
 router.post('/lesson', async (req, res) => {
   const { userId, lessonId } = req.body;
+  const progressData = await calculateProgress(userId);
+
+  // Check if a certificate should be issued
+  const certificate = await checkAndIssueCertificate(userId, progressData);
+
+  const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
 
   if (!userId || !lessonId) {
     return res.status(400).json({ error: 'userId and lessonId are required' });
@@ -26,7 +32,7 @@ router.post('/lesson', async (req, res) => {
     });
 
     if (existingCompletion && existingCompletion.completed) {
-      return res.status(200).json({ message: 'You already submitted this lesson.' });
+      return res.status(200).json({ message: `You already submitted this Lesson.  ${completedLessons} out of ${totalLessons}` });
     }
 
     // Mark lesson as completed
@@ -50,12 +56,6 @@ router.post('/lesson', async (req, res) => {
     });
 
     // Calculate progress
-    const progressData = await calculateProgress(userId);
-
-    // Check if a certificate should be issued
-    const certificate = await checkAndIssueCertificate(userId, progressData);
-
-    const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
 
     if (certificate) {
       res.status(200).json({
@@ -78,6 +78,13 @@ router.post('/challenge', async (req, res) => {
     return res.status(401).json({ error: 'Refresh token is required.' });
   }
 
+  const progressData = await calculateProgress(userId);
+
+  // Check if a certificate should be issued
+  const certificate = await checkAndIssueCertificate(userId, progressData);
+
+  const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
+
   const { userId, challengeId } = req.body;
 
   if (!userId || !challengeId) {
@@ -95,9 +102,9 @@ router.post('/challenge', async (req, res) => {
       },
     });
 
-    // if (existingCompletion && existingCompletion.completed) {
-    //   return res.status(200).json({ message: 'You already submitted this challenge.' });
-    // }
+    if (existingCompletion && existingCompletion.completed) {
+      return res.status(200).json({ message: `You already submitted this challenge.  ${completedLessons} out of ${totalLessons}`});
+    }
 
     // Mark challenge as completed
     await prisma.challengeCompletion.upsert({
@@ -168,16 +175,60 @@ router.post('/challenge', async (req, res) => {
     await notifyMentor(mentorId, challengeId);
 
     // Calculate progress
-    const progressData = await calculateProgress(userId);
-
-    // Check if a certificate should be issued
-    const certificate = await checkAndIssueCertificate(userId, progressData);
-
-    const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
 
     if (certificate) {
+          const notifyMentor = async (userId) => {
+            // Create a notification for the mentor
+            const MentorNotification = await prisma.notification.create({
+              data: {
+                userId: userId,
+                title: 'One of your student has completed all challenges',
+                description: 'Certificate need to be issued!',
+                type: 'Cert',
+              },
+            });
+            console.log('Admin Notification Created', MentorNotification);
+      
+            // Emit notification to the mentor
+            const io = socket.getIO();
+            io.to(userId).emit('receiveNotification', {
+              id: MentorNotification.id,
+              title: MentorNotification.title,
+              description: MentorNotification.description,
+              type: MentorNotification.type,
+              createdAt: MentorNotification.createdAt,
+            });
+          };
+      
+          await notifyMentor(userId);
+
+          const notifyAdmin = async (userId) => {
+            // Create a notification for the mentor
+            const AdminNotification = await prisma.notification.create({
+              data: {
+                userId: userId,
+                title: 'A Trainee has completed all challenges',
+                description: 'Certificate need to be issued!',
+                type: 'Cert',
+              },
+            });
+            console.log('Admin Notification Created', AdminNotification);
+      
+            // Emit notification to the mentor
+            const io = socket.getIO();
+            io.to(userId).emit('receiveNotification', {
+              id: AdminNotification.id,
+              title: AdminNotification.title,
+              description: AdminNotification.description,
+              type: AdminNotification.type,
+              createdAt: AdminNotification.createdAt,
+            });
+          };
+      
+          await notifyAdmin(userId);
+
       res.status(200).json({
-        message: `Challenge completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate was issued!`,
+        message: `Challenge completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate will be issued!`,
         certificate,
       });
     } else {
@@ -191,30 +242,63 @@ router.post('/challenge', async (req, res) => {
 });
 
 // Get completion percentages for lessons and challenges
-router.get('/percentage', async (req, res) => {
-  const { userId } = req.query;
+router.get('/percentage/:userId/:classId', async (req, res) => {
+  const { userId, classId } = req.params;
 
-  if (!userId) {
-    return res.status(400).json({ error: 'userId is required' });
+  if (!userId || !classId) {
+    return res.status(400).json({ error: 'userId and classId are required' });
   }
 
   try {
-    const totalLessons = await prisma.lesson.count();
+    // Check if the user is part of the class
+    const userInClass = await prisma.class.findFirst({
+      where: {
+        users: {
+          some: { id: userId },
+        },
+      },
+    });
+
+    if (!userInClass) {
+      return res.status(403).json({ message: 'You are not from this class' });
+    }
+
+    // Fetch total and completed lessons
+    const totalLessons = await prisma.lesson.count({ where: { classId } });
     const completedLessons = await prisma.lessonCompletion.count({
-      where: { userId, completed: true },
+      where: {
+        userId,
+        completed: true,
+        lesson: {
+          classId, // Filter by classId through the related lesson
+        },
+      },
     });
     const lessonPercentage = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
 
-    const totalChallenges = await prisma.challenge.count();
+    // Fetch total and completed challenges
+    const totalChallenges = await prisma.challenge.count({ where: { classId } });
     const completedChallenges = await prisma.challengeCompletion.count({
-      where: { userId, completed: true },
+      where: { userId, classId, completed: true },
     });
     const challengePercentage = totalChallenges > 0 ? (completedChallenges / totalChallenges) * 100 : 0;
 
-    res.status(200).json({
-      lessonPercentage: lessonPercentage.toFixed(2),
-      challengePercentage: challengePercentage.toFixed(2),
+    // If lessons or challenges are incomplete, return a message
+    if (lessonPercentage < 100 || challengePercentage < 100) {
+      return res.status(200).json({ message: "You haven't finished this class yet" });
+    }
+
+    // Check if the certificate exists
+    const certificate = await prisma.certificate.findFirst({
+      where: { userId, classId },
     });
+
+    if (!certificate) {
+      return res.status(200).json({ message: "You haven't received a certificate yet" });
+    }
+
+    // Return the certificate's filepath if all conditions are met
+    res.status(200).json({ filepath: certificate.filepath });
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
@@ -243,47 +327,19 @@ async function checkAndIssueCertificate(userId, progressData) {
   const challengeProgress = (completedChallenges / totalChallenges) * 100;
 
   if (lessonProgress === 100 && challengeProgress === 100) {
-    const classId = await prisma.class.findFirst({
+    const classId = await prisma.class.findMany({
       where: { lessons: { some: {} } }, // Fetch the related classId dynamically
     }).id;
-    return await issueCertificate(userId, classId);
+    const userId = await prisma.user.findMany({
+      where: { lessons: { some: {} } }, // Fetch the related userId dynamically
+    }).id
+    console.log('Class ID:', classId, userId);
+    // return await issueCertificate(userId, classId);
   }
 
   return null;
 }
 
 // Helper function to issue certificates
-async function issueCertificate(userId, classId) {
-  const existingCertificate = await prisma.certificate.findFirst({
-    where: { traineeId: userId, classId },
-  });
-
-  const trainee = await prisma.user.findUnique({ where: { id: userId } });
-  const classInfo = await prisma.class.findUnique({ where: { id: classId } });
-
-  if (!existingCertificate) {
-    const certificate = await prisma.certificate.create({
-      data: {
-        traineeId: userId,
-        classId,
-        status: 'Issued',
-      },
-    });
-
-    return {
-      message: 'Completion Certificate',
-      content: `This certificate is presented to 
-      ${trainee.fullName} 
-      For successfully completing 
-      the ${classInfo.className} class
-      Completion date: ${new Date(certificate.createdAt).toLocaleDateString()}`,
-    };
-  } else {
-    return {
-      message: 'Certificate Already Issued',
-      content: `Certificate for ${trainee.fullName} for the ${classInfo.className} class has already been issued.`,
-    };
-  }
-}
 
 module.exports = router;

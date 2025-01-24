@@ -166,45 +166,61 @@ router.put('/verify',protect, async (req, res) => {
     }
 });
 
-router.put('/edit', protect, async (req, res) => {
-    const { id } = req.user; // Assume the `protect` middleware attaches the user ID to `req.user`
-    const { fullName, nickname, address, mobile } = req.body;
+router.put('/edit/:id', async (req, res) => {
+  const { id } = req.params;
+  const { fullName, nickname, address, mobile, profileFilePath, profileMimeType, profileSize } = req.body;
 
-    // Input validation
-    if (!fullName && !nickname && !address && !mobile) {
-        return res.status(400).json({
-            message: 'At least one field (fullName, nickname, address, or mobile) must be provided.',
-        });
-    }
+  try {
+      // Update the user with only the provided fields
+      const updatedUser = await prismaClient.user.update({
+          where: { id },
+          data: {
+              ...(fullName && { fullName }),
+              ...(nickname && { nickname }),
+              ...(address && { address }),
+              ...(mobile && { mobile }),
+          },
+      });
 
-    try {
-        // Update the user with only the provided fields
-        const updatedUser = await prismaClient.user.update({
-            where: { id },
-            data: {
-                ...(fullName && { fullName }),
-                ...(nickname && { nickname }),
-                ...(address && { address }),
-                ...(mobile && { mobile }),
-            },
-        });
+      // Update the PROFESSIONAL profile if any profile-related fields are provided
+      let updatedProfile = null;
+      if (profileFilePath || profileMimeType || profileSize) {
+          updatedProfile = await prismaClient.profile.updateMany({
+              where: {
+                  userId: id,
+                  type: 'PROFESSIONAL',
+              },
+              data: {
+                  ...(profileFilePath && { filepath: profileFilePath }),
+                  ...(profileMimeType && { mimetype: profileMimeType }),
+                  ...(profileSize && { size: profileSize }),
+              },
+          });
+      }
 
-        return res.status(200).json({
-            message: 'User information updated successfully',
-            user: {
-                fullName: updatedUser.fullName,
-                nickname: updatedUser.nickname,
-                address: updatedUser.address,
-                mobile: updatedUser.mobile,
-            },
-        });
-    } catch (error) {
-        console.error('Error updating user information:', error);
-        return res.status(500).json({
-            message: 'An error occurred while updating user information',
-            error: error.message,
-        });
-    }
+      return res.status(200).json({
+          message: 'User information updated successfully',
+          user: {
+              fullName: updatedUser.fullName,
+              nickname: updatedUser.nickname,
+              address: updatedUser.address,
+              mobile: updatedUser.mobile,
+          },
+          profile: updatedProfile
+              ? {
+                    filepath: profileFilePath,
+                    mimetype: profileMimeType,
+                    size: profileSize,
+                }
+              : null,
+      });
+  } catch (error) {
+      console.error('Error updating user information:', error);
+      return res.status(500).json({
+          message: 'An error occurred while updating user information',
+          error: error.message,
+      });
+  }
 });
 
 // Logout Route
