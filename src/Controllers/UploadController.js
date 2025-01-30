@@ -140,6 +140,7 @@ const lessonUpload = multer({
   storage: lessonStorage,
   limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
   fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = ["application/pdf", "image/jpeg", "image/png", "application/zip"];
     if (allowedMimeTypes.lesson.includes(file.mimetype)) {
       cb(null, true);
     } else {
@@ -155,6 +156,10 @@ router.post("/lesson", lessonUpload.array("files", 3), verifyToken , verifyRoles
 
   if (!title || !description || !deadline || !classId || !batchId) {
     return res.status(400).json({ error: "All lesson fields are required." });
+  }
+
+  if (isNaN(Date.parse(deadline))) {
+    return res.status(400).json({ error: "Invalid deadline format. Please provide a valid date." });
   }
 
   if (!files || files.length === 0) {
@@ -377,7 +382,7 @@ const challengeStorage = multer.diskStorage({
 
 const challengeUpload = multer({
   storage: challengeStorage,
-  limits: { fileSize: 50 * 1024 * 1024 }, // Maximum file size 50 MB
+  limits: { fileSize: 100 * 1024 * 1024 }, // Maximum file size 50 MB
   fileFilter: (req, file, cb) => {
     const allowedMimeTypes = ["application/pdf", "image/jpeg", "image/png", "application/zip"];
     if (allowedMimeTypes.includes(file.mimetype)) {
@@ -389,9 +394,9 @@ const challengeUpload = multer({
 });
 
 // Challenge upload endpoint
-router.post("/challenge", challengeUpload.single("file"), async (req, res) => {
+router.post("/challenge", challengeUpload.array("files", 3), verifyToken, verifyRoles(['MENTOR']), async (req, res) => {
   const { title, description, batchId, classId, deadline, mentorId } = req.body; // Added mentorId
-  const file = req.file;
+  const files = req.files;
 
   // Validate required fields
   if (!title || !description || !batchId || !classId || !deadline || !mentorId) {
@@ -404,32 +409,52 @@ router.post("/challenge", challengeUpload.single("file"), async (req, res) => {
   }
 
   // Check if a file was uploaded
-  if (!file) {
+  if (!files || files.length === 0) {
     return res.status(400).json({ error: "File is required for uploading a challenge." });
   }
 
   try {
-    // Create the challenge record in the database
+    // Create the challenge reco  rd in the database
     const challenge = await prisma.challenge.create({
       data: {
         title,
         description,
-        batchId,
-        classId,
-        mentorId, // Save the mentor ID
-        createdAt: new Date(),
         deadline: new Date(deadline),
-        filepath: file.path,
-        mimetype: file.mimetype,
-        size: file.size,
+        batch : {
+          connect: { id : batchId}
+        },
+        class : {
+          connect : { id : classId}
+        },
+        mentor : {
+          connect : { id : mentorId }
+        }, 
       },
     });
+
+    const uploads = files.map((file) =>
+      prisma.file.create({
+        data: {
+          filename: sanitizeFilename(file.originalname),
+          filepath: file.path,
+          mimetype: file.mimetype,
+          size: file.size,
+          challenge: {
+            connect: { id: challenge.id },
+          },
+        },
+      })
+    );
+
+    const results = await Promise.all(uploads);
 
     res.status(201).json({
       message: "Challenge uploaded successfully.",
       challenge,
+      files: results,
     });
   } catch (error) {
+    console.log("challenge", error)
     res.status(500).json({
       error: "Failed to upload challenge.",
       details: error.message,

@@ -110,7 +110,7 @@ model Batch {
   endDate      DateTime?
   participants User[]    @relation("BatchParticipants")
   status       Status
-  challenges   Challenge[]
+  challenges   Challenge[] @relation("BatchChallenges")
   classes      BatchClass[]
   lessons      Lesson[]  @relation("BatchLessons")
   certificates Certificate[]
@@ -122,7 +122,7 @@ model Class {
   createdAt   DateTime
   participant Int         @default(0) 
   batches     BatchClass[]
-  challenges  Challenge[]
+  challenges  Challenge[] @relation("ClassChallenges")
   lessons     Lesson[]    @relation("ClassLessons")
   certificates Certificate[]
   Lcompletions LessonCompletion[]
@@ -145,16 +145,14 @@ model Challenge {
   id          String @id @default(uuid())
   title       String   @db.VarChar(100)
   description String   @db.VarChar(300)
-  batch       Batch  @relation(fields: [batchId], references: [id])
+  batch       Batch  @relation("BatchChallenges", fields: [batchId], references: [id])
   batchId     String
-  class        Class  @relation(fields: [classId], references: [id])
+  class        Class  @relation("ClassChallenges" ,fields: [classId], references: [id])
   classId     String
-  createdAt   DateTime
+  createdAt   DateTime @default(now())
   deadline    DateTime
   status      LessonStatus @default(NOT_DEADLINE)
-  filepath    String  @db.Text
-  mimetype    String
-  size        Int
+  files       File[]
   completions ChallengeCompletion[]
   mentorId    String
   mentor      User    @relation("UploadedChallenges", fields: [mentorId], references: [id], onDelete: Cascade) // Mentor relation
@@ -235,8 +233,10 @@ model File {
   filepath  String   @db.Text
   mimetype  String   @db.VarChar(100)
   size      Int
-  lessonId  String
-  lesson    Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  lessonId  String?
+  lesson    Lesson?   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
+  challengeId String?
+  challenge Challenge? @relation(fields: [challengeId], references: [id], onDelete: Cascade)
 }
 
 model Profile {

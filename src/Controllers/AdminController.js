@@ -492,12 +492,7 @@ router.get('/batchs/:id', async (req, res) => {
     const batch = await prismaClient.batch.findUnique({
       where: { id },
       include: {
-        classes: {
-          include: {
-            lessons: true,
-            challenges: true // Include related Lesson records for each Class
-          },
-        },
+        classes: true,
       },
     });
 
@@ -508,6 +503,7 @@ router.get('/batchs/:id', async (req, res) => {
     res.status(200).json(batch);
   } catch (error) {
     res.status(500).json({ error: error.message });
+    console.log(error)
   }
 });
 
@@ -695,49 +691,139 @@ router.delete('/user/:id', async (req, res) => {
   }
 });
 
-//router to get user based on class
-router.get('/class/:classId', async (req, res) => {
-  const { classId } = req.params;
+// Router to get all class data based on classId
+router.get('/class/:batchId', async (req, res) => {
+  const { batchId } = req.params;
 
   try {
-    // Fetch users based on classId
-    const users = await prismaClient.user.findMany({
+    // Fetch classes based on batchId
+    const classes = await prismaClient.class.findMany({
       where: {
-        classes: {
+        batches: {
           some: {
-            id: classId, // Ensure this is the correct relation and column name
+            batchId: batchId, // Ensure this matches your Prisma schema for the relation
           },
         },
       },
       include: {
-        classes: true, // Include the related classes if needed
+        users: {
+          select: {
+            fullName: true,
+            email: true,
+            role: true,
+          },
+        }, // Include related users
+        mentors: {
+          select: {
+            fullName: true,
+            email: true,
+            role: true,
+          },
+        }, // Include related mentors
+        batches: true, // Include related batches
+        challenges: true, // Include related challenges
+        lessons: true, // Include related lessons
+        certificates: true, // Include related certificates
+        Lcompletions: true, // Include related lesson completions
+        Ccompletions: true, // Include related challenge completions
       },
     });
 
-    if (!users || users.length === 0) {
-      return res.status(404).json({ message: 'No users found for this class.' });
+    if (!classes || classes.length === 0) {
+      return res.status(404).json({ message: 'No classes found for this batch.' });
     }
 
-    // Count the number of users enrolled in the class
-    const participantCount = users.length;
+    // Add participant count for each class
+    const classesWithParticipantCount = await Promise.all(
+      classes.map(async (classData) => {
+        const participantCount = classData.users.length;
 
-    // Update the class to reflect the number of participants
+        // Optionally, update the participant count in the database
+        await prismaClient.class.update({
+          where: { id: classData.id },
+          data: {
+            participant: participantCount,
+          },
+        });
+
+        return {
+          ...classData,
+          participantCount,
+        };
+      })
+    );
+
+    // Return the classes with their participant count
+    return res.status(200).json(classesWithParticipantCount);
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'An error occurred while fetching the classes.' });
+  }
+});
+
+router.get('/classes/:id', async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    // Fetch the class data based on classId
+    const classData = await prismaClient.class.findUnique({
+      where: { id: id },
+      include: {
+        users: {
+          select: {
+            profiles: {select: {filepath: true}},
+            fullName: true,
+            email: true,
+            role: true,
+          }
+        }, // Include related users
+        mentors: {
+          select: {
+            fullName: true,
+            email: true,
+            role: true,
+          }
+        }, // Include related mentors
+        batches: true, 
+         challenges: {
+          include: {
+            files: true,
+         }},
+         lessons: {
+          include: {
+            files: true,
+          }
+         },
+        certificates: true, // Include related certificates
+        Lcompletions: true, // Include related lesson completions
+        Ccompletions: true, // Include related challenge completions
+      },
+    });
+
+    if (!classData) {
+      return res.status(404).json({ message: 'Class not found.' });
+    }
+
+    // Count the number of users (participants) in the class
+    const participantCount = classData.users.length;
+
+    // Update the class with the participant count
     await prismaClient.class.update({
-      where: { id: classId },
+      where: { id: id },
       data: {
         participant: participantCount,
       },
     });
 
-    // Return the users along with the updated participant count
+    // Return the class data along with the updated participant count
     return res.status(200).json({
-      classId,
+      id,
       participantCount,
-      users,
+      classData,
     });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: 'An error occurred while fetching users.' });
+    return res.status(500).json({ message: 'An error occurred while fetching the class data.' });
   }
 });
 

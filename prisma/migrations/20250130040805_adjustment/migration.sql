@@ -1,0 +1,3 @@
+-- AlterTable
+ALTER TABLE "File" ALTER COLUMN "lessonId" DROP NOT NULL,
+ALTER COLUMN "challengeId" DROP NOT NULL;
