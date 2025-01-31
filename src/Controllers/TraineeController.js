@@ -607,5 +607,63 @@ router.get('/:userId/cb', async (req, res) => {
   }
 });
 
+router.get('/class/user/:userId', async (req, res) => {
+  try {
+    const { userId } = req.params; // userId is already a string
+
+    const classes = await prismaClient.class.findMany({
+      where: {
+        users: {
+          some: {
+            id: userId, 
+          },
+        },
+      },
+      select: {
+        id: true,
+        className: true,
+        participant: 0,
+        createdAt: true,
+        status: true,
+        batches: {
+          include: {
+            batch: {
+              select: {
+                batchNum: true,
+                batchTitle: true,
+              },
+            },
+          },
+        },
+        mentors: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            profiles: {
+              select: {
+                filepath: true,
+              }
+            }
+          },
+        },
+        users: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+        challenges: true,
+        lessons: true,
+        certificates: true,
+      },
+    });
+
+    res.status(200).json(classes);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
 
 module.exports = router;
