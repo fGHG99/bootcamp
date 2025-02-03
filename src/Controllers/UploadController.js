@@ -22,6 +22,7 @@ const sanitizeFilename = (filename) => {
 const allowedMimeTypes = {
   profile: ["image/jpeg", "image/png", "application/pdf"],
   lesson: ["image/jpeg", "image/png", "image/jpg", "application/pdf", "application/pptx"],
+  challenge: ["image/jpeg", "image/png", "image/jpg", "application/pdf", "application/pptx"],
   certificate: ["application/pdf", "image/jpeg", "image/png"],
 };
 
@@ -141,7 +142,7 @@ const lessonUpload = multer({
   limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
   fileFilter: (req, file, cb) => {
     const allowedMimeTypes = ["application/pdf", "image/jpeg", "image/png", "application/zip"];
-    if (allowedMimeTypes.lesson.includes(file.mimetype)) {
+    if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
       cb(new Error("Invalid file type. Only JPEG, PNG, PDF, and PPTX are allowed."));

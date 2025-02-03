@@ -31,8 +31,9 @@ enum Visibility {
 }
 
 enum LessonStatus {
-  NOT_DEADLINE
-  DEADLINE
+  ASSIGNED
+  NOTSUBMITTED
+  SUBMITTED
 }
 
 enum ProfileType {
@@ -151,7 +152,7 @@ model Challenge {
   classId     String
   createdAt   DateTime @default(now())
   deadline    DateTime
-  status      LessonStatus @default(NOT_DEADLINE)
+  status      LessonStatus @default(ASSIGNED)
   files       File[]
   completions ChallengeCompletion[]
   mentorId    String
@@ -187,7 +188,7 @@ model Lesson {
   title       String   @db.VarChar(100)
   description String   @db.VarChar(300)
   deadline    DateTime
-  status      LessonStatus @default(NOT_DEADLINE)
+  status      LessonStatus @default(ASSIGNED)
   createdAt   DateTime @default(now())
   files       File[]   
   batchId     String
