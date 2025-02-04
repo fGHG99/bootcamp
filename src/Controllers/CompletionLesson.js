@@ -1,23 +1,81 @@
 const { PrismaClient } = require('@prisma/client');
 const express = require('express');
+const multer = require("multer");
 const socket = require('./SocketHandler')
 const getUserIdFromToken  = require('../Routes/GetUserId');
+const fs = require("fs");
 
 const prisma = new PrismaClient();
 const router = express.Router();
 
-// Mark a lesson as completed
-router.post('/lesson', async (req, res) => {
-  const { userId, lessonId } = req.body;
-  const progressData = await calculateProgress(userId);
+// Utility to ensure directory exists
+const ensureDirectoryExistence = (folderPath) => {
+  if (!fs.existsSync(folderPath)) {
+    fs.mkdirSync(folderPath, { recursive: true });
+  }
+};
 
-  // Check if a certificate should be issued
-  const certificate = await checkAndIssueCertificate(userId, progressData);
+// Sanitize filename
+const sanitizeFilename = (filename) => {
+  return filename.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_.-]/g, "");
+};
 
-  const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
+const lessonSubmissionStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const targetFolder = "public/lesson/submissions";
+    ensureDirectoryExistence(targetFolder);
+    cb(null, targetFolder);
+  },
+  filename: (req, file, cb) => {
+    const sanitizedFilename = sanitizeFilename(file.originalname);
+    cb(null, `${Date.now()}-${sanitizedFilename}`);
+  },
+});
+
+const lessonSubmissionUpload = multer({
+  storage: lessonSubmissionStorage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = ["application/pdf", "image/jpeg", "image/png", "application/zip"];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only JPEG, PNG, PDF, and PPTX are allowed."));
+    }
+  },
+});
+
+const challengeSubmissionStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const targetFolder = "public/challenge/submissions";
+    ensureDirectoryExistence(targetFolder);
+    cb(null, targetFolder);
+  },
+  filename: (req, file, cb) => {
+    const sanitizedFilename = sanitizeFilename(file.originalname);
+    cb(null, `${Date.now()}-${sanitizedFilename}`);
+  },
+});
+
+const challengeSubmissionUpload = multer({
+  storage: challengeSubmissionStorage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = ["application/pdf", "image/jpeg", "image/png", "application/zip"];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only JPEG, PNG, PDF, and PPTX are allowed."));
+    }
+  },
+});
+
+router.post('/lesson', lessonSubmissionUpload.array('files', 10), async (req, res) => {
+  const { userId, lessonId} = req.body;
+  const { files } = req;
 
   if (!userId || !lessonId) {
-    return res.status(400).json({ error: 'userId and lessonId are required' });
+    return res.status(400).json({ error: 'userId and lessonId are required.' });
   }
 
   try {
@@ -32,13 +90,15 @@ router.post('/lesson', async (req, res) => {
     });
 
     if (existingCompletion && existingCompletion.completed) {
-      return res.status(200).json({ message: `You already submitted this Lesson.  ${completedLessons} out of ${totalLessons}` });
+      return res.status(200).json({
+        message: 'You already submitted this lesson.',
+      });
     }
 
-    // Mark lesson as completed
-    await prisma.lessonCompletion.upsert({
+    // Mark lesson as completed or create a new entry
+    const lessonCompletion = await prisma.lessonCompletion.upsert({
       where: {
-        userId_lessonId: { // Use the composite unique constraint
+        userId_lessonId: {
           userId,
           lessonId,
         },
@@ -55,37 +115,48 @@ router.post('/lesson', async (req, res) => {
       },
     });
 
-    // Calculate progress
+    // If files are uploaded, save them in the File model
+    if (files && files.length > 0) {
+      const uploadedFiles = files.map((file) => ({
+        filename: sanitizeFilename(file.originalname),
+        filepath: file.path,
+        mimetype: file.mimetype,
+        size: file.size,
+        completionId: lessonCompletion.id, // Link the file to the lessonCompletion entry
+      }));
 
-    if (certificate) {
-      res.status(200).json({
-        message: `Lesson completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate was issued!`,
-        certificate,
-      });
-    } else {
-      res.status(200).json({
-        message: `Lesson completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges.`,
+      await prisma.file.createMany({
+        data: uploadedFiles,
       });
     }
+    // Calculate progress
+    const progressData = await calculateProgress(userId);
+
+    // Check if a certificate should be issued
+    const certificate = await checkAndIssueCertificate(userId, progressData);
+    const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
+
+    // Construct response message
+    const message = certificate
+      ? `Lesson completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate was issued!`
+      : `Lesson completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges.`;
+
+    // Return response
+    res.status(200).json({
+      message,
+      files,
+      certificate,
+    });
   } catch (error) {
+    console.error('Error completing lesson:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-router.post('/challenge', async (req, res) => {
-  const refreshToken = req.headers.refreshToken || req.headers.authorization?.split(" ")[1];
-  if (!refreshToken) {
-    return res.status(401).json({ error: 'Refresh token is required.' });
-  }
-
-  const progressData = await calculateProgress(userId);
-
-  // Check if a certificate should be issued
-  const certificate = await checkAndIssueCertificate(userId, progressData);
-
-  const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
-
+//mark a challenge as completed
+router.post('/challenge', challengeSubmissionUpload.array('files', 10), async (req, res) => {
   const { userId, challengeId } = req.body;
+  const { files } = req;
 
   if (!userId || !challengeId) {
     return res.status(400).json({ error: 'userId and challengeId are required' });
@@ -107,7 +178,7 @@ router.post('/challenge', async (req, res) => {
     }
 
     // Mark challenge as completed
-    await prisma.challengeCompletion.upsert({
+    const challengeCompletion = await prisma.challengeCompletion.upsert({
       where: {
         userId_challengeId: { // Use the composite unique constraint
           userId,
@@ -125,6 +196,25 @@ router.post('/challenge', async (req, res) => {
         completedAt: new Date(),
       },
     });
+
+    if (files && files.length > 0) {
+      const uploadedFiles = files.map((file) => ({
+        filename: sanitizeFilename(file.originalname),
+        filepath: file.path,
+        mimetype: file.mimetype,
+        size: file.size,
+        chCompletionId: challengeCompletion.id, // Link the file to the lessonCompletion entry
+      }));
+
+      await prisma.file.createMany({
+        data: uploadedFiles,
+      });
+    }
+
+
+    const progressData = await calculateProgress(userId);
+    const certificate = await checkAndIssueCertificate(userId, progressData);
+    const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
 
      // Replace with how you retrieve the token
     const mentorId = getUserIdFromToken(refreshToken);
@@ -230,10 +320,12 @@ router.post('/challenge', async (req, res) => {
       res.status(200).json({
         message: `Challenge completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate will be issued!`,
         certificate,
+        files,
       });
     } else {
       res.status(200).json({
         message: `Challenge completed successfully. You finished ${completedChallenges} out of ${totalChallenges} challenges.`,
+        files,
       });
     }
   } catch (error) {
@@ -339,7 +431,5 @@ async function checkAndIssueCertificate(userId, progressData) {
 
   return null;
 }
-
-// Helper function to issue certificates
 
 module.exports = router;

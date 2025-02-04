@@ -131,6 +131,7 @@ model Class {
   status      Status      @default(Tba)
   users       User[]      @relation("UserClasses")
   mentors     User[]      @relation("ClassMentors")
+  notes       Note[]      @relation("ClassNotes")
 }
 
 model BatchClass {
@@ -166,6 +167,7 @@ model ChallengeCompletion {
   challengeId  String
   challenge    Challenge @relation(fields: [challengeId], references: [id], onDelete: Cascade)
   completed    Boolean   @default(false)
+  submissionFiles File[]
   classId      String?
   class        Class?     @relation(fields: [classId], references: [id], onDelete: Cascade)
   completedAt  DateTime?
@@ -180,6 +182,8 @@ model Note {
   grader      User        @relation("GraderNotes", fields: [graderId], references: [id])
   traineeId   String
   trainee     User        @relation("TraineeNotes", fields: [traineeId], references: [id])
+  classId     String
+  class       Class       @relation("ClassNotes", fields: [classId], references: [id])
   createdAt   DateTime    @default(now())
 }
 
@@ -207,6 +211,7 @@ model LessonCompletion {
   lessonId    String
   lesson      Lesson   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   completed   Boolean  @default(false)
+  submissionFiles File[]
   classId     String?
   class     Class?    @relation(fields: [classId], references:[id], onDelete: Cascade)
   completedAt DateTime?
@@ -238,6 +243,10 @@ model File {
   lesson    Lesson?   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   challengeId String?
   challenge Challenge? @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  completionId String?
+  completion LessonCompletion? @relation(fields: [completionId], references: [id])
+  chCompletionId String?
+  completions ChallengeCompletion? @relation(fields: [chCompletionId], references: [id])
 }
 
 model Profile {

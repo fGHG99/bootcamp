@@ -8,7 +8,7 @@ const prismaClient = new prisma();
 
 //router to add note 
 router.post('/note/add', protect, async (req, res) => {
-  const { content, visibility, graderId, traineeId } = req.body;
+  const { content, visibility, graderId, traineeId, classId } = req.body;
 
   // Validate content length
   if (!content || content.length > 300) {
@@ -22,6 +22,7 @@ router.post('/note/add', protect, async (req, res) => {
         visibility,
         graderId,
         traineeId,
+        classId,
       },
     });
 
@@ -55,6 +56,7 @@ router.get('/notes/:graderId/:visibility?', protect,  async (req, res) => {
       include: {
         grader: true, // Include grader details
         trainee: true, // Include trainee details
+        class: true, // Include class details
       },
     });
 
@@ -75,6 +77,10 @@ router.get('/notes/:graderId/:visibility?', protect,  async (req, res) => {
         nickname: note.trainee.nickname || 'No Nickname',
         email: note.trainee.email || 'No Email',
       },
+      class: {
+        id: note.class.id,
+        className: note.class.className || 'Unknown class',
+      }
     }));
 
     res.json(transformedNotes);
@@ -85,7 +91,7 @@ router.get('/notes/:graderId/:visibility?', protect,  async (req, res) => {
 });
 
 //router to get note for specific trainee only
-router.get('/note/list/trainee/:traineeId', protect, async (req, res) => {
+router.get('/note/trainee/:traineeId', protect, async (req, res) => {
     const { traineeId } = req.params;
     const { role, userId } = req.user; // User information from JWT middleware
   
@@ -99,7 +105,10 @@ router.get('/note/list/trainee/:traineeId', protect, async (req, res) => {
             traineeId,
             visibility: 'FOR_TRAINEE',
           },
-          include: { grader: true }, // Include grader information
+          include: { 
+            grader: true,
+            class: true, 
+          }, // Include grader information
         });
       } else if (['MENTOR', 'EXAMINER', 'ADMIN'].includes(role)) {
         // Mentors, Examiners, and Admins can see all notes
@@ -107,7 +116,10 @@ router.get('/note/list/trainee/:traineeId', protect, async (req, res) => {
           where: {
             traineeId,
           },
-          include: { grader: true },
+          include: { 
+            grader: true,
+            class: true, 
+          },
         });
       } else {
         return res.status(403).json({ message: 'Unauthorized' });
@@ -121,6 +133,10 @@ router.get('/note/list/trainee/:traineeId', protect, async (req, res) => {
           batch: note.grader.batchId || 'No Batch',
           role: note.grader.role,
         },
+        class: {
+          id: note.class.id,
+          className: note.class.className || 'No Class',
+        }
       })); 
   
       res.json(modifiedNotes);

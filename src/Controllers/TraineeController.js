@@ -715,6 +715,34 @@ router.get("/lessons", getUserId, async (req, res) => {
   }
 });
 
+router.get("/lesson/:id", async (req, res) => {
+  try {
+    const { id } = req.params; // Get challengeId from the route parameters
+
+    const lesson = await prismaClient.lesson.findUnique({
+      where: { id },
+      include: {
+        mentor: {
+          select: {
+            fullName: true,
+            nickname: true,
+          }
+        },
+        files: true,
+      }
+    });
+
+    if (!lesson) {
+      return res.status(404).json({ error: "Lesson not found" });
+    }
+    res.status(200).json(lesson);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "Failed to fetch lesson.", details: error.message });
+  }
+});
+
 router.get("/:userId/cb", async (req, res) => {
   const { userId } = req.params;
 
@@ -810,6 +838,65 @@ router.get("/class/user/:userId", async (req, res) => {
   }
 });
 
+router.get("/class/mentor/:mentorId", async (req, res) => {
+  try {
+    const { mentorId } = req.params; // userId is already a string
+
+    const classes = await prismaClient.class.findMany({
+      where: {
+        mentors: {
+          some: {
+            id: mentorId,
+          },
+        },
+      },
+      select: {
+        id: true,
+        className: true,
+        participant: 0,
+        createdAt: true,
+        status: true,
+        batches: {
+          include: {
+            batch: {
+              select: {
+                batchNum: true,
+                batchTitle: true,
+              },
+            },
+          },
+        },
+        mentors: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+            profiles: {
+              select: {
+                filepath: true,
+              },
+            },
+          },
+        },
+        users: {
+          select: {
+            id: true,
+            fullName: true,
+            email: true,
+          },
+        },
+        challenges: true,
+        lessons: true,
+        certificates: true,
+      },
+    });
+
+    res.status(200).json(classes);
+  } catch (error) {
+    res.status(500).json({ error: error.message });
+  }
+});
+
 router.get("/users/:id", async (req, res) => {
   const { id } = req.params; // Extract user ID from request parameters
 
@@ -832,6 +919,62 @@ router.get("/users/:id", async (req, res) => {
   } catch (error) {
     console.error("Error fetching user:", error);
     return res.status(500).json({ message: "Server error" });
+  }
+});
+
+router.get('/note/class/:classId', protect, async (req, res) => {
+  const { classId } = req.params;
+  const { role, userId } = req.user; // User information from JWT middleware
+
+  try {
+    let notes;
+
+    if (role === 'TRAINEE') {
+      // Trainees can only see notes in their class marked "FOR_TRAINEE"
+      notes = await prismaClient.note.findMany({
+        where: {
+          classId,
+          traineeId: userId, // Ensure the trainee only sees their own notes
+          visibility: 'FOR_TRAINEE',
+        },
+        include: {
+          grader: true,
+          class: true,
+        },
+      });
+    } else if (['MENTOR', 'EXAMINER', 'ADMIN'].includes(role)) {
+      // Mentors, Examiners, and Admins can see all notes in the class
+      notes = await prismaClient.note.findMany({
+        where: {
+          classId,
+        },
+        include: {
+          grader: true,
+          class: true,
+        },
+      });
+    } else {
+      return res.status(403).json({ message: 'Unauthorized' });
+    }
+
+    // Modify the grader field for a better response format
+    const modifiedNotes = notes.map(note => ({
+      ...note,
+      grader: {
+        fullName: `${note.grader.fullName} (${note.grader.nickname || 'No Nickname'})`,
+        batch: note.grader.batchId || 'No Batch',
+        role: note.grader.role,
+      },
+      class: {
+        id: note.class.id,
+        className: note.class.className || 'No Class',
+      },
+    }));
+
+    res.json(modifiedNotes);
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ error: 'Server error' });
   }
 });
 
