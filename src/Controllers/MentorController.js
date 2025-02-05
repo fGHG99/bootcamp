@@ -33,6 +33,83 @@ router.post('/note/add', protect, async (req, res) => {
   }
 });
 
+//post notes berdasarkan lesson id atau challenge id 
+router.post('/notes/subject/:id', async (req, res) => {
+  const { id } = req.params;
+  const { content, visibility, graderId, traineeId, classId } = req.body;
+
+  try {
+    let isValid = false;
+
+    // Check if the id belongs to a lesson
+    const lesson = await prismaClient.lesson.findUnique({
+      where: { id },
+    });
+
+    if (lesson) {
+      // Verify if the lesson belongs to the classId
+      const lessonInClass = await prismaClient.class.findFirst({
+        where: {
+          id: classId,
+          lessons: {
+            some: { id },
+          },
+        },
+      });
+
+      if (!lessonInClass) {
+        return res.status(400).json({ message: 'Lesson is not from this class' });
+      }
+      isValid = true;
+    } else {
+      // If not found in lessons, check in challenges
+      const challenge = await prismaClient.challenge.findUnique({
+        where: { id },
+      });
+
+      if (challenge) {
+        // Verify if the challenge belongs to the classId
+        const challengeInClass = await prismaClient.class.findFirst({
+          where: {
+            id: classId,
+            challenges: {
+              some: { id },
+            },
+          },
+        });
+
+        if (!challengeInClass) {
+          return res.status(400).json({ message: 'Challenge is not from this class' });
+        }
+        isValid = true;
+      }
+    }
+
+    if (!isValid) {
+      return res.status(404).json({ message: 'Invalid lessonId or challengeId' });
+    }
+
+    // Create the note
+    const note = await prismaClient.note.create({
+      data: {
+        content,
+        visibility,
+        graderId,
+        traineeId,
+        classId,
+        lessonId: lesson ? id : null,
+        challengeId: lesson ? null : id,
+        createdAt: new Date(),
+      },
+    });
+
+    return res.status(201).json({ message: 'Note created successfully', note });
+  } catch (error) {
+    console.error(error);
+    return res.status(500).json({ message: 'Internal server error', error: error.message });
+  }
+});
+
 //router to get notes based on visibility OR BASED ON GRADER
 router.get('/notes/:graderId/:visibility?', protect,  async (req, res) => {
   const { graderId, visibility } = req.params;

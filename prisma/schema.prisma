@@ -157,7 +157,8 @@ model Challenge {
   files       File[]
   completions ChallengeCompletion[]
   mentorId    String
-  mentor      User    @relation("UploadedChallenges", fields: [mentorId], references: [id], onDelete: Cascade) // Mentor relation
+  mentor      User    @relation("UploadedChallenges", fields: [mentorId], references: [id], onDelete: Cascade) 
+  notes       Note[]   @relation("ChallengeNotes")
 }
 
 model ChallengeCompletion {
@@ -184,6 +185,10 @@ model Note {
   trainee     User        @relation("TraineeNotes", fields: [traineeId], references: [id])
   classId     String
   class       Class       @relation("ClassNotes", fields: [classId], references: [id])
+  lessonId    String?     
+  lesson      Lesson?      @relation("LessonNotes", fields: [lessonId], references: [id])
+  challengeId String?
+  challenge   Challenge?   @relation("ChallengeNotes", fields: [challengeId], references: [id])
   createdAt   DateTime    @default(now())
 }
 
@@ -201,7 +206,8 @@ model Lesson {
   class       Class    @relation("ClassLessons", fields: [classId], references: [id], onDelete: Cascade)
   completions LessonCompletion[]
   mentorId    String
-  mentor      User     @relation("UploadedLessons", fields: [mentorId], references: [id], onDelete: Cascade) // Mentor relation
+  mentor      User     @relation("UploadedLessons", fields: [mentorId], references: [id], onDelete: Cascade) 
+  notes       Note[]   @relation("LessonNotes")
 }
 
 model LessonCompletion {

@@ -70,8 +70,9 @@ const challengeSubmissionUpload = multer({
   },
 });
 
-router.post('/lesson', lessonSubmissionUpload.array('files', 10), async (req, res) => {
-  const { userId, lessonId} = req.body;
+router.post('/lesson/:lessonId', lessonSubmissionUpload.array('files', 10), async (req, res) => {
+  const { userId } = req.body;
+  const { lessonId } = req.params;
   const { files } = req;
 
   if (!userId || !lessonId) {
@@ -89,10 +90,19 @@ router.post('/lesson', lessonSubmissionUpload.array('files', 10), async (req, re
       },
     });
 
-    if (existingCompletion && existingCompletion.completed) {
-      return res.status(200).json({
-        message: 'You already submitted this lesson.',
-      });
+    if (existingCompletion) {
+      // Jika sudah completed, ubah status pada table Lesson menjadi SUBMITTED
+      if (existingCompletion.completed) {
+        await prisma.lesson.update({
+          where: {
+            id: lessonId,
+          },
+          data: {
+            status: 'SUBMITTED',
+          },
+        });
+        return res.status(200).json({ message: 'Lesson has been submitted successfully.' });
+      }
     }
 
     // Mark lesson as completed or create a new entry
@@ -115,6 +125,16 @@ router.post('/lesson', lessonSubmissionUpload.array('files', 10), async (req, re
       },
     });
 
+    // Update lesson status to COMPLETED
+    await prisma.lesson.update({
+      where: {
+        id: lessonId,
+      },
+      data: {
+        status: 'SUBMITTED',
+      },
+    });
+
     // If files are uploaded, save them in the File model
     if (files && files.length > 0) {
       const uploadedFiles = files.map((file) => ({
@@ -129,6 +149,7 @@ router.post('/lesson', lessonSubmissionUpload.array('files', 10), async (req, re
         data: uploadedFiles,
       });
     }
+
     // Calculate progress
     const progressData = await calculateProgress(userId);
 
@@ -154,8 +175,9 @@ router.post('/lesson', lessonSubmissionUpload.array('files', 10), async (req, re
 });
 
 //mark a challenge as completed
-router.post('/challenge', challengeSubmissionUpload.array('files', 10), async (req, res) => {
-  const { userId, challengeId } = req.body;
+router.post('/challenge/:challengeId', challengeSubmissionUpload.array('files', 10), async (req, res) => {
+  const { userId } = req.body;
+  const { challengeId } = req.params;
   const { files } = req;
 
   if (!userId || !challengeId) {
@@ -173,14 +195,24 @@ router.post('/challenge', challengeSubmissionUpload.array('files', 10), async (r
       },
     });
 
-    if (existingCompletion && existingCompletion.completed) {
-      return res.status(200).json({ message: `You already submitted this challenge.  ${completedLessons} out of ${totalLessons}`});
+    if (existingCompletion) {
+      if (existingCompletion.completed) {
+        await prisma.challenge.update({
+          where: {
+            id: challengeId,
+          },
+          data: {
+            status: 'SUBMITTED',
+          },
+        });
+        return res.status(200).json({ message: 'Challenge has been submitted successfully.' });
+      }
     }
 
     // Mark challenge as completed
     const challengeCompletion = await prisma.challengeCompletion.upsert({
       where: {
-        userId_challengeId: { // Use the composite unique constraint
+        userId_challengeId: {
           userId,
           challengeId,
         },
@@ -197,13 +229,23 @@ router.post('/challenge', challengeSubmissionUpload.array('files', 10), async (r
       },
     });
 
+    // Update challenge status to COMPLETED
+    await prisma.challenge.update({
+      where: {
+        id: challengeId,
+      },
+      data: {
+        status: 'SUBMITTED',
+      },
+    });
+
     if (files && files.length > 0) {
       const uploadedFiles = files.map((file) => ({
         filename: sanitizeFilename(file.originalname),
         filepath: file.path,
         mimetype: file.mimetype,
         size: file.size,
-        chCompletionId: challengeCompletion.id, // Link the file to the lessonCompletion entry
+        chCompletionId: challengeCompletion.id,
       }));
 
       await prisma.file.createMany({
@@ -211,124 +253,83 @@ router.post('/challenge', challengeSubmissionUpload.array('files', 10), async (r
       });
     }
 
-
     const progressData = await calculateProgress(userId);
     const certificate = await checkAndIssueCertificate(userId, progressData);
     const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
 
-     // Replace with how you retrieve the token
-    const mentorId = getUserIdFromToken(refreshToken);
+    const message = certificate
+      ? `Challenge completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate was issued!`
+      : `Challenge completed successfully. You finished ${completedChallenges} out of ${totalChallenges} challenges.`;
 
-    console.log('Mentor ID:', mentorId);
-    // Create a new notification for the user
-    const userNotification = await prisma.notification.create({
-      data: {
-        userId,
-        title: 'Challenge Completed!',
-        description: `You have successfully completed challenge ID: ${challengeId}.`,
-        type: 'success',
+    res.status(200).json({
+      message,
+      files,
+      certificate,
+    });
+  } catch (error) {
+    console.error('Error completing challenge:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/lesson/:lessonId/status', async (req, res) => {
+  const { lessonId } = req.params;
+
+  if (!lessonId) {
+    return res.status(400).json({ error: 'lessonId is required' });
+  }
+
+  try {
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: lessonId },
+      select: {
+      status: true,
+      completions: {
+        include: {
+          submissionFiles: true,
+        }
+      }
       },
     });
-    console.log('User notification created:', userNotification);
 
-    const io = socket.getIO();
-    io.to(userId).emit('receiveNotification', {
-      id: userNotification.id,
-      title: userNotification.title,
-      description: userNotification.description,
-      type: userNotification.type,
-      createdAt: userNotification.createdAt,
+    if (!lesson) {
+      return res.status(404).json({ error: 'Lesson not found' });
+    }
+
+    res.status(200).json({ status: lesson.status, files: lesson.completions.map((l) => l.submissionFiles) });
+    } catch (error) {
+    console.error('Error fetching lesson status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/challenge/:challengeId/status', async (req, res) => {
+  const { challengeId } = req.params;
+
+  if (!challengeId) {
+    return res.status(400).json({ error: 'challengeId is required' });
+  }
+
+  try {
+    const challenge = await prisma.challenge.findUnique({
+      where: { id: challengeId },
+      select: { 
+        status: true,
+        completions: {
+          include: {
+            submissionFiles: true,
+          }
+        }
+      },
     });
 
-    const notifyMentor = async (mentorId, challengeId) => {
-      // Create a notification for the mentor
-      const mentorNotification = await prisma.notification.create({
-        data: {
-          userId: mentorId,
-          title: 'Student Challenge Completion',
-          description: `Your student has completed challenge ID: ${challengeId}.`,
-          type: 'info',
-        },
-      });
-      console.log('Mentor notification created:', mentorNotification);
-
-      // Emit notification to the mentor
-      io.to(mentorId).emit('receiveNotification', {
-        id: mentorNotification.id,
-        title: mentorNotification.title,
-        description: mentorNotification.description,
-        type: mentorNotification.type,
-        createdAt: mentorNotification.createdAt,
-      });
-    };
-
-    await notifyMentor(mentorId, challengeId);
-
-    // Calculate progress
-
-    if (certificate) {
-          const notifyMentor = async (userId) => {
-            // Create a notification for the mentor
-            const MentorNotification = await prisma.notification.create({
-              data: {
-                userId: userId,
-                title: 'One of your student has completed all challenges',
-                description: 'Certificate need to be issued!',
-                type: 'Cert',
-              },
-            });
-            console.log('Admin Notification Created', MentorNotification);
-      
-            // Emit notification to the mentor
-            const io = socket.getIO();
-            io.to(userId).emit('receiveNotification', {
-              id: MentorNotification.id,
-              title: MentorNotification.title,
-              description: MentorNotification.description,
-              type: MentorNotification.type,
-              createdAt: MentorNotification.createdAt,
-            });
-          };
-      
-          await notifyMentor(userId);
-
-          const notifyAdmin = async (userId) => {
-            // Create a notification for the mentor
-            const AdminNotification = await prisma.notification.create({
-              data: {
-                userId: userId,
-                title: 'A Trainee has completed all challenges',
-                description: 'Certificate need to be issued!',
-                type: 'Cert',
-              },
-            });
-            console.log('Admin Notification Created', AdminNotification);
-      
-            // Emit notification to the mentor
-            const io = socket.getIO();
-            io.to(userId).emit('receiveNotification', {
-              id: AdminNotification.id,
-              title: AdminNotification.title,
-              description: AdminNotification.description,
-              type: AdminNotification.type,
-              createdAt: AdminNotification.createdAt,
-            });
-          };
-      
-          await notifyAdmin(userId);
-
-      res.status(200).json({
-        message: `Challenge completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate will be issued!`,
-        certificate,
-        files,
-      });
-    } else {
-      res.status(200).json({
-        message: `Challenge completed successfully. You finished ${completedChallenges} out of ${totalChallenges} challenges.`,
-        files,
-      });
+    if (!challenge) {
+      return res.status(404).json({ error: 'challenge not found' });
     }
+
+    res.status(200).json({ status: challenge.status, files: challenge.completions.map((c) => c.submissionFiles) });
   } catch (error) {
+    console.error('Error fetching challenge status:', error);
     res.status(500).json({ error: error.message });
   }
 });
