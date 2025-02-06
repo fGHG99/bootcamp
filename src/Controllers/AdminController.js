@@ -260,20 +260,17 @@ router.put('/class/:id', async (req, res) => {
   const { className, mentors, users } = req.body;
 
   try {
-    // Pastikan kelas dengan ID yang diberikan ada
+    // Check if the class exists
     const existingClass = await prismaClient.class.findUnique({
       where: { id },
-      include: { 
-        mentors: true,
-        users: true, 
-      }, // Sertakan relasi mentors untuk validasi
+      include: { mentors: true, users: true },
     });
 
     if (!existingClass) {
       return res.status(404).json({ error: 'Class not found' });
     }
 
-    // Bangun data pembaruan secara dinamis
+    // Prepare update data dynamically
     const updateData = {};
 
     if (className !== undefined) {
@@ -282,35 +279,31 @@ router.put('/class/:id', async (req, res) => {
 
     if (mentors !== undefined) {
       updateData.mentors = {
-        set: mentors.map((mentorId) => ({ id: mentorId })), // Perbarui mentors jika diberikan
+        connect: mentors.map((mentorId) => ({ id: mentorId })), // Add new mentors
       };
     }
 
     if (users !== undefined) {
       updateData.users = {
-        set: users.map((userId) => ({ id: userId })), // Perbarui mentors jika diberikan
+        connect: users.map((userId) => ({ id: userId })), // Add new users
       };
     }
 
-    // Lakukan pembaruan
+    // Perform the update
     const updatedClass = await prismaClient.class.update({
       where: { id },
       data: updateData,
       include: {
-        mentors: {
-          select: { id: true, fullName: true, email: true },
-        },
-        users: {
-          select : { id: true, fullName: true, email: true },
-        }
+        mentors: { select: { id: true, fullName: true, email: true } },
+        users: { select: { id: true, fullName: true, email: true } },
       },
     });
 
     res.status(200).json(updatedClass);
   } catch (error) {
     console.error('Error updating class:', error);
-    res.status(500).json({ error: 'Internal Server Error' });
-  }
+    res.status(500).json({ error: 'Internal Server Error' });
+  }
 });
 
 router.post('/batch', verifyRoles(['ADMIN']), verifyToken, async (req, res) => {

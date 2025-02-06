@@ -193,8 +193,8 @@ router.post("/lesson", lessonUpload.array("files", 3), verifyToken , verifyRoles
           mimetype: file.mimetype,
           size: file.size,
           lesson: {
-            connect: { id: lesson.id },
-          },
+            connect: { id: lesson.id }
+          }
         },
       })
     );

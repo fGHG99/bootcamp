@@ -80,32 +80,7 @@ router.post('/lesson/:lessonId', lessonSubmissionUpload.array('files', 10), asyn
   }
 
   try {
-    // Check if the lesson is already completed
-    const existingCompletion = await prisma.lessonCompletion.findUnique({
-      where: {
-        userId_lessonId: {
-          userId,
-          lessonId,
-        },
-      },
-    });
-
-    if (existingCompletion) {
-      // Jika sudah completed, ubah status pada table Lesson menjadi SUBMITTED
-      if (existingCompletion.completed) {
-        await prisma.lesson.update({
-          where: {
-            id: lessonId,
-          },
-          data: {
-            status: 'SUBMITTED',
-          },
-        });
-        return res.status(200).json({ message: 'Lesson has been submitted successfully.' });
-      }
-    }
-
-    // Mark lesson as completed or create a new entry
+    // Upsert lessonCompletion and explicitly select the ID
     const lessonCompletion = await prisma.lessonCompletion.upsert({
       where: {
         userId_lessonId: {
@@ -113,38 +88,35 @@ router.post('/lesson/:lessonId', lessonSubmissionUpload.array('files', 10), asyn
           lessonId,
         },
       },
+      select: {
+        id: true, // Explicitly select the ID
+      },
       update: {
         completed: true,
         completedAt: new Date(),
+        status: 'SUBMITTED',
       },
       create: {
         userId,
         lessonId,
         completed: true,
         completedAt: new Date(),
-      },
-    });
-
-    // Update lesson status to COMPLETED
-    await prisma.lesson.update({
-      where: {
-        id: lessonId,
-      },
-      data: {
         status: 'SUBMITTED',
       },
     });
 
     // If files are uploaded, save them in the File model
     if (files && files.length > 0) {
+      // Map the files and associate them with the LessonCompletion entry
       const uploadedFiles = files.map((file) => ({
         filename: sanitizeFilename(file.originalname),
         filepath: file.path,
         mimetype: file.mimetype,
         size: file.size,
-        completionId: lessonCompletion.id, // Link the file to the lessonCompletion entry
+        lesCompletionId: lessonCompletion.id, // Associate with LessonCompletion
       }));
-
+    
+      // Save the files in the File table
       await prisma.file.createMany({
         data: uploadedFiles,
       });
@@ -162,6 +134,7 @@ router.post('/lesson/:lessonId', lessonSubmissionUpload.array('files', 10), asyn
       ? `Lesson completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate was issued!`
       : `Lesson completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges.`;
 
+      console.log(lessonCompletion.id)
     // Return response
     res.status(200).json({
       message,
@@ -172,7 +145,7 @@ router.post('/lesson/:lessonId', lessonSubmissionUpload.array('files', 10), asyn
     console.error('Error completing lesson:', error);
     res.status(500).json({ error: error.message });
   }
-});
+}); 
 
 //mark a challenge as completed
 router.post('/challenge/:challengeId', challengeSubmissionUpload.array('files', 10), async (req, res) => {
@@ -195,21 +168,22 @@ router.post('/challenge/:challengeId', challengeSubmissionUpload.array('files', 
       },
     });
 
-    if (existingCompletion) {
-      if (existingCompletion.completed) {
-        await prisma.challenge.update({
-          where: {
-            id: challengeId,
+    if (existingCompletion && existingCompletion.completed) {
+      await prisma.challengeCompletion.update({
+        where: {
+          userId_challengeId: {
+            userId,
+            challengeId,
           },
-          data: {
-            status: 'SUBMITTED',
-          },
-        });
-        return res.status(200).json({ message: 'Challenge has been submitted successfully.' });
-      }
+        },
+        data: {
+          status: 'SUBMITTED', // Updating challengeCompletion.status instead of challenge.status
+        },
+      });
+      return res.status(200).json({ message: 'Challenge has been submitted successfully.' });
     }
 
-    // Mark challenge as completed
+    // Mark challenge as completed in challengeCompletion table
     const challengeCompletion = await prisma.challengeCompletion.upsert({
       where: {
         userId_challengeId: {
@@ -220,25 +194,18 @@ router.post('/challenge/:challengeId', challengeSubmissionUpload.array('files', 
       update: {
         completed: true,
         completedAt: new Date(),
+        status: 'SUBMITTED', // Updating status in challengeCompletion
       },
       create: {
         userId,
         challengeId,
         completed: true,
         completedAt: new Date(),
+        status: 'SUBMITTED', // Setting status in new entry
       },
     });
 
-    // Update challenge status to COMPLETED
-    await prisma.challenge.update({
-      where: {
-        id: challengeId,
-      },
-      data: {
-        status: 'SUBMITTED',
-      },
-    });
-
+    // If files are uploaded, save them in the File model
     if (files && files.length > 0) {
       const uploadedFiles = files.map((file) => ({
         filename: sanitizeFilename(file.originalname),
@@ -253,6 +220,7 @@ router.post('/challenge/:challengeId', challengeSubmissionUpload.array('files', 
       });
     }
 
+    // Calculate progress
     const progressData = await calculateProgress(userId);
     const certificate = await checkAndIssueCertificate(userId, progressData);
     const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
@@ -272,47 +240,54 @@ router.post('/challenge/:challengeId', challengeSubmissionUpload.array('files', 
   }
 });
 
-router.get('/lesson/:lessonId/status', async (req, res) => {
-  const { lessonId } = req.params;
+router.get('/lesson/:lessonId/:userId/status', async (req, res) => {
+  const { lessonId, userId } = req.params;
 
-  if (!lessonId) {
-    return res.status(400).json({ error: 'lessonId is required' });
+  if (!lessonId || !userId) {
+    return res.status(400).json({ error: 'lessonId and userId are required' });
   }
 
   try {
-    const lesson = await prisma.lesson.findUnique({
-      where: { id: lessonId },
+    // Use `findUnique` to get a specific LessonCompletion based on lessonId and userId
+    const lessonCompletion = await prisma.lessonCompletion.findUnique({
+      where: {
+        userId_lessonId: {
+          userId,
+          lessonId,
+        },
+      },
       select: {
-      status: true,
-      completions: {
-        include: {
-          submissionFiles: true,
-        }
-      }
+        status: true,
+        submissionFiles: true,
       },
     });
 
-    if (!lesson) {
-      return res.status(404).json({ error: 'Lesson not found' });
+    if (!lessonCompletion) {
+      return res.status(404).json({ error: 'Lesson completion not found' });
     }
 
-    res.status(200).json({ status: lesson.status, files: lesson.completions.map((l) => l.submissionFiles) });
-    } catch (error) {
+    res.status(200).json(lessonCompletion);
+  } catch (error) {
     console.error('Error fetching lesson status:', error);
     res.status(500).json({ error: error.message });
   }
 });
 
-router.get('/challenge/:challengeId/status', async (req, res) => {
-  const { challengeId } = req.params;
+router.get('/challenge/:challengeId/:userId/status', async (req, res) => {
+  const { challengeId, userId } = req.params;
 
   if (!challengeId) {
     return res.status(400).json({ error: 'challengeId is required' });
   }
 
   try {
-    const challenge = await prisma.challenge.findUnique({
-      where: { id: challengeId },
+    const challenge = await prisma.challengeCompletion.findUnique({
+      where: { 
+        userId_challengeId: {
+          userId,
+          challengeId,
+        }
+      },
       select: { 
         status: true,
         completions: {

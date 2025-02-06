@@ -32,6 +32,7 @@ enum Visibility {
 
 enum LessonStatus {
   ASSIGNED
+  LATE
   NOTSUBMITTED
   SUBMITTED
 }
@@ -172,6 +173,7 @@ model ChallengeCompletion {
   classId      String?
   class        Class?     @relation(fields: [classId], references: [id], onDelete: Cascade)
   completedAt  DateTime?
+  status       LessonStatus @default(ASSIGNED)
   @@unique([userId, challengeId]) 
 }
 
@@ -221,6 +223,7 @@ model LessonCompletion {
   classId     String?
   class     Class?    @relation(fields: [classId], references:[id], onDelete: Cascade)
   completedAt DateTime?
+  status      LessonStatus @default(ASSIGNED)
   @@unique([userId, lessonId])
 }
 
@@ -249,10 +252,10 @@ model File {
   lesson    Lesson?   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   challengeId String?
   challenge Challenge? @relation(fields: [challengeId], references: [id], onDelete: Cascade)
-  completionId String?
-  completion LessonCompletion? @relation(fields: [completionId], references: [id])
+  lesCompletionId String?
+  completionLs LessonCompletion? @relation(fields: [lesCompletionId], references: [id], onDelete: Cascade)
   chCompletionId String?
-  completions ChallengeCompletion? @relation(fields: [chCompletionId], references: [id])
+  completionCh ChallengeCompletion? @relation(fields: [chCompletionId], references: [id], onDelete: Cascade)
 }
 
 model Profile {

@@ -507,5 +507,228 @@ router.put("/schedule/:id", verifyToken, async (req, res) => {
   }
 });
 
+router.get('/lesson/:lessonId/completions', async (req, res) => {
+  const { lessonId } = req.params;
+
+  if (!lessonId) {
+    return res.status(400).json({ error: 'Lesson ID is required' });
+  }
+
+  try {
+    // Find all lesson completions related to the lessonId
+    const lessonCompletions = await prismaClient.lessonCompletion.findMany({
+      where: { lessonId },
+      select: { userId: true } // Only fetch user IDs
+    });
+
+    if (!lessonCompletions.length) {
+      return res.status(404).json({ message: 'No lesson completions found for this lesson' });
+    }
+
+    // Extract user IDs
+    const userIds = lessonCompletions.map((completion) => completion.userId);
+
+    // Fetch lesson completions grouped by status
+    const submittedCompletions = await prismaClient.lessonCompletion.findMany({
+      where: {
+        lessonId,
+        status: 'SUBMITTED'
+      },
+      include: { 
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            nickname: true,
+          }
+        }, 
+        lesson: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            deadline: true,
+          }
+        } 
+      }
+    });
+
+    const notSubmittedCompletions = await prismaClient.lessonCompletion.findMany({
+      where: {
+        lessonId,
+        status: 'NOTSUBMITTED'
+      },
+      include: { 
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            nickname: true,
+          }
+        }, 
+        lesson: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            deadline: true,
+          }
+        } 
+      }
+    });
+
+    const lateCompletions = await prismaClient.lessonCompletion.findMany({
+      where: {
+        lessonId,
+        status: 'LATE'
+      },
+      include: { 
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            nickname: true,
+          }
+        }, 
+        lesson: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            deadline: true,
+          }
+        } 
+      }
+    });
+
+    // Combine all completions into an array
+    const allCompletions = [
+      ...submittedCompletions.map(completion => ({ ...completion, status: 'SUBMITTED' })),
+      ...notSubmittedCompletions.map(completion => ({ ...completion, status: 'NOTSUBMITTED' })),
+      ...lateCompletions.map(completion => ({ ...completion, status: 'LATE' }))
+    ];
+
+    res.status(200).json({
+      message: 'Lesson completions fetched successfully',
+      completions: allCompletions
+    });
+  } catch (error) {
+    console.error('Error fetching lesson completions:', error);
+    res.status(500).json({ error: 'Failed to fetch lesson completions', details: error.message });
+  }
+});
+
+router.get('/challenge/:challengeId/completions', async (req, res) => {
+  const { challengeId } = req.params;
+
+  if (!challengeId) {
+    return res.status(400).json({ error: 'Challenge ID is required' });
+  }
+
+  try {
+    // Find all challenge completions related to the challengeId
+    const challengeCompletions = await prismaClient.challengeCompletion.findMany({
+      where: { challengeId },
+      select: { userId: true } // Only fetch user IDs
+    });
+
+    if (!challengeCompletions.length) {
+      return res.status(404).json({ message: 'No challenge completions found for this challenge' });
+    }
+
+    // Extract user IDs
+    const userIds = challengeCompletions.map((completion) => completion.userId);
+
+    // Fetch challenge completions grouped by status
+    const submittedCompletions = await prismaClient.challengeCompletion.findMany({
+      where: {
+        challengeId,
+        status: 'SUBMITTED'
+      },
+      include: { 
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            nickname: true,
+          }
+        }, 
+        challenge: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            deadline: true,
+          }
+        } 
+      }
+    });
+
+    const notSubmittedCompletions = await prismaClient.challengeCompletion.findMany({
+      where: {
+        challengeId,
+        status: 'NOTSUBMITTED'
+      },
+      include: { 
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            nickname: true,
+          }
+        }, 
+        challenge: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            deadline: true,
+          }
+        } 
+      }
+    });
+
+    const lateCompletions = await prismaClient.challengeCompletion.findMany({
+      where: {
+        challengeId,
+        status: 'LATE'
+      },
+      include: { 
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            nickname: true,
+          }
+        }, 
+        challenge: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            deadline: true,
+          }
+        } 
+      }
+    });
+
+    // Combine all completions into an array
+    const allCompletions = [
+      ...submittedCompletions.map(completion => ({ ...completion, status: 'SUBMITTED' })),
+      ...notSubmittedCompletions.map(completion => ({ ...completion, status: 'NOTSUBMITTED' })),
+      ...lateCompletions.map(completion => ({ ...completion, status: 'LATE' }))
+    ];
+
+    res.status(200).json({
+      message: 'Challenge completions fetched successfully',
+      completions: allCompletions
+    });
+  } catch (error) {
+    console.error('Error fetching challenge completions:', error);
+    res.status(500).json({ error: 'Failed to fetch challenge completions', details: error.message });
+  }
+});
+
+
 module.exports = router;
   
