@@ -33,80 +33,89 @@ router.post('/note/add', protect, async (req, res) => {
   }
 });
 
-//post notes berdasarkan lesson id atau challenge id 
-router.post('/notes/subject/:id', async (req, res) => {
-  const { id } = req.params;
-  const { content, visibility, graderId, traineeId, classId } = req.body;
+//router to add note based from lessoncompletion id
+router.post('/note/:lessonCompletionId/lesson', protect, async (req, res) => {
+  const { lessonCompletionId } = req.params;
+  const { content, visibility } = req.body;
 
   try {
-    let isValid = false;
+    if (!content || !visibility) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
 
-    // Check if the id belongs to a lesson
-    const lesson = await prismaClient.lesson.findUnique({
-      where: { id },
+    const graderId = req.user.id;
+    const lessonCompletion = await prismaClient.lessonCompletion.findUnique({
+      where: { id: lessonCompletionId },
+      select: { userId: true }, // Only fetch the userId
     });
 
-    if (lesson) {
-      // Verify if the lesson belongs to the classId
-      const lessonInClass = await prismaClient.class.findFirst({
-        where: {
-          id: classId,
-          lessons: {
-            some: { id },
-          },
-        },
-      });
-
-      if (!lessonInClass) {
-        return res.status(400).json({ message: 'Lesson is not from this class' });
-      }
-      isValid = true;
-    } else {
-      // If not found in lessons, check in challenges
-      const challenge = await prismaClient.challenge.findUnique({
-        where: { id },
-      });
-
-      if (challenge) {
-        // Verify if the challenge belongs to the classId
-        const challengeInClass = await prismaClient.class.findFirst({
-          where: {
-            id: classId,
-            challenges: {
-              some: { id },
-            },
-          },
-        });
-
-        if (!challengeInClass) {
-          return res.status(400).json({ message: 'Challenge is not from this class' });
-        }
-        isValid = true;
-      }
+    if (!lessonCompletion) {
+      return res.status(404).json({ message: 'LessonCompletion not found' });
     }
 
-    if (!isValid) {
-      return res.status(404).json({ message: 'Invalid lessonId or challengeId' });
-    }
-
-    // Create the note
+    const traineeId = lessonCompletion.userId;
     const note = await prismaClient.note.create({
       data: {
         content,
         visibility,
         graderId,
         traineeId,
-        classId,
-        lessonId: lesson ? id : null,
-        challengeId: lesson ? null : id,
-        createdAt: new Date(),
+        lessonCompletionId, 
       },
     });
 
-    return res.status(201).json({ message: 'Note created successfully', note });
+    await prismaClient.lessonCompletion.update({
+      where: { id: lessonCompletionId },
+      data: { status: 'GRADED' },
+    });
+
+    res.status(201).json({ message: 'Note created and LessonCompletion updated to GRADED', note });
   } catch (error) {
     console.error(error);
-    return res.status(500).json({ message: 'Internal server error', error: error.message });
+    res.status(500).json({ message: 'Internal server error', error });
+  }
+});
+
+//router to add note based from challengecompletion id
+router.post('/note/:challengeCompletionId/challenge', protect, async (req, res) => {
+  const { challengeCompletionId } = req.params;
+  const { content, visibility } = req.body;
+
+  try {
+    if (!content || !visibility) {
+      return res.status(400).json({ message: 'Missing required fields' });
+    }
+
+    const graderId = req.user.id; // Get graderId from middleware
+    const challengeCompletion = await prismaClient.challengeCompletion.findUnique({
+      where: { id: challengeCompletionId },
+      select: { userId: true }, 
+    });
+
+    if (!challengeCompletion) {
+      return res.status(404).json({ message: 'ChallengeCompletion not found' });
+    }
+
+    const traineeId = challengeCompletion.userId;
+    const note = await prismaClient.note.create({
+      data: {
+        content,
+        visibility,
+        graderId,
+        traineeId,
+        challengeCompletionId, // Link to ChallengeCompletion
+      },
+    });
+
+    await prismaClient.challengeCompletion.update({
+      where: { id: challengeCompletionId },
+      data: { status: 'GRADED' },
+    });
+
+    res.status(201).json({ message: 'Note created and ChallengeCompletion updated to GRADED', note });
+  } catch (error) {
+    console.error(error);
+    res.status(500).json({ message: 'Internal server error', error });
   }
 });
 
@@ -525,9 +534,6 @@ router.get('/lesson/:lessonId/completions', async (req, res) => {
       return res.status(404).json({ message: 'No lesson completions found for this lesson' });
     }
 
-    // Extract user IDs
-    const userIds = lessonCompletions.map((completion) => completion.userId);
-
     // Fetch lesson completions grouped by status
     const submittedCompletions = await prismaClient.lessonCompletion.findMany({
       where: {
@@ -601,11 +607,36 @@ router.get('/lesson/:lessonId/completions', async (req, res) => {
       }
     });
 
+    const gradedCompletions = await prismaClient.lessonCompletion.findMany({
+      where: {
+        lessonId,
+        status: 'GRADED'
+      },
+      include: { 
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            nickname: true,
+          }
+        }, 
+        lesson: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            deadline: true,
+          }
+        } 
+      }
+    });
+
     // Combine all completions into an array
     const allCompletions = [
       ...submittedCompletions.map(completion => ({ ...completion, status: 'SUBMITTED' })),
       ...notSubmittedCompletions.map(completion => ({ ...completion, status: 'NOTSUBMITTED' })),
-      ...lateCompletions.map(completion => ({ ...completion, status: 'LATE' }))
+      ...lateCompletions.map(completion => ({ ...completion, status: 'LATE' })),
+      ...gradedCompletions.map(completion => ({ ...completion, status: 'GRADED'}))
     ];
 
     res.status(200).json({
@@ -635,10 +666,6 @@ router.get('/challenge/:challengeId/completions', async (req, res) => {
     if (!challengeCompletions.length) {
       return res.status(404).json({ message: 'No challenge completions found for this challenge' });
     }
-
-    // Extract user IDs
-    const userIds = challengeCompletions.map((completion) => completion.userId);
-
     // Fetch challenge completions grouped by status
     const submittedCompletions = await prismaClient.challengeCompletion.findMany({
       where: {
@@ -712,11 +739,36 @@ router.get('/challenge/:challengeId/completions', async (req, res) => {
       }
     });
 
+    const gradedCompletions = await prismaClient.challengeCompletion.findMany({
+      where: {
+        lessonId,
+        status: 'GRADED'
+      },
+      include: { 
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            nickname: true,
+          }
+        }, 
+        lesson: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            deadline: true,
+          }
+        } 
+      }
+    });
+
     // Combine all completions into an array
     const allCompletions = [
       ...submittedCompletions.map(completion => ({ ...completion, status: 'SUBMITTED' })),
       ...notSubmittedCompletions.map(completion => ({ ...completion, status: 'NOTSUBMITTED' })),
-      ...lateCompletions.map(completion => ({ ...completion, status: 'LATE' }))
+      ...lateCompletions.map(completion => ({ ...completion, status: 'LATE' })),
+      ...gradedCompletions.map(completion => ({ ...completion, status: 'GRADED'}))
     ];
 
     res.status(200).json({
@@ -728,7 +780,6 @@ router.get('/challenge/:challengeId/completions', async (req, res) => {
     res.status(500).json({ error: 'Failed to fetch challenge completions', details: error.message });
   }
 });
-
 
 module.exports = router;
   
