@@ -259,6 +259,7 @@ router.get('/lesson/:lessonId/:userId/status', async (req, res) => {
       select: {
         status: true,
         submissionFiles: true,
+        notes: true,
       },
     });
 
@@ -290,11 +291,8 @@ router.get('/challenge/:challengeId/:userId/status', async (req, res) => {
       },
       select: { 
         status: true,
-        completions: {
-          include: {
-            submissionFiles: true,
-          }
-        }
+        submissionFiles: true,
+        notes: true,
       },
     });
 
