@@ -288,11 +288,13 @@ router.post("/logout", async (req, res) => {
   const { accessToken } = req.body;
 
   if (!accessToken) {
-    return res.status(400).json({ message: "token is required" });
+    return res.status(400).json({ message: "Token is required" });
   }
 
+  let decoded; // Define decoded outside the try block
+
   try {
-    const decoded = jwt.verify(accessToken, SECRET_KEY);
+    decoded = jwt.verify(accessToken, SECRET_KEY); // Assign decoded here
 
     await prismaClient.user.update({
       where: { id: decoded.id },
@@ -307,21 +309,24 @@ router.post("/logout", async (req, res) => {
     console.error("Error during logout:", error);
 
     if (error.name === "TokenExpiredError") {
-      await prismaClient.user.update({
-        where: { id: decoded.id },
-        data: {
-          isLoggedIn: false,
-          refreshToken: null,
-        },
-      });
-      return res.status(401).json({ message: "token already expired" });
+      if (decoded && decoded.id) {
+        // Ensure decoded is valid before accessing its properties
+        await prismaClient.user.update({
+          where: { id: decoded.id },
+          data: {
+            isLoggedIn: false,
+            refreshToken: null,
+          },
+        });
+      }
+      return res.status(401).json({ message: "Token already expired" });
     }
-
     return res
       .status(500)
       .json({ message: "Error during logout", error: error.message });
   }
 });
+
 
 router.get("/:id/pro", async (req, res) => {
   const { id } = req.params;

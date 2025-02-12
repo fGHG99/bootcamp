@@ -117,6 +117,7 @@ model Batch {
   classes      BatchClass[]
   lessons      Lesson[]  @relation("BatchLessons")
   certificates Certificate[]
+  cover  BatchCover? @relation("BatchCover")
 }
 
 model Class {
@@ -131,6 +132,27 @@ model Class {
   status      Status      @default(Tba)
   users       User[]      @relation("UserClasses")
   mentors     User[]      @relation("ClassMentors")
+  cover  ClassCover? @relation("ClassCover")
+}
+
+model ClassCover {
+  id             String  @id @default(cuid())
+  classId        String  @unique
+  filePath       String?  @db.Text  // Optional to allow updates
+  fileName       String?  @db.Text
+  mimeType       String?  @db.Text
+  size           Int?
+  class          Class   @relation("ClassCover", fields: [classId], references: [id], onDelete: Cascade)
+}
+
+model BatchCover {
+  id             String  @id @default(cuid())
+  batchId        String  @unique
+  filePath       String?  @db.Text  // Optional to allow updates
+  fileName       String?  @db.Text
+  mimeType       String?  @db.Text
+  size           Int?
+  batch          Batch   @relation("BatchCover", fields: [batchId], references: [id], onDelete: Cascade)
 }
 
 model BatchClass {
@@ -150,13 +172,13 @@ model Challenge {
   batchId     String
   class        Class  @relation("ClassChallenges" ,fields: [classId], references: [id])
   classId     String
-  createdAt   DateTime @default(now())
   deadline    DateTime
-  status      LessonStatus @default(ASSIGNED)
   files       File[]
   completions ChallengeCompletion[]
+  status      LessonStatus @default(ASSIGNED)
   mentorId    String
   mentor      User    @relation("UploadedChallenges", fields: [mentorId], references: [id], onDelete: Cascade) 
+  createdAt   DateTime @default(now())
 }
 
 model ChallengeCompletion {
@@ -193,16 +215,16 @@ model Lesson {
   title       String   @db.VarChar(100)
   description String   @db.VarChar(300)
   deadline    DateTime
-  status      LessonStatus @default(ASSIGNED)
-  createdAt   DateTime @default(now())
   files       File[]   
   batchId     String
   batch       Batch    @relation("BatchLessons", fields: [batchId], references: [id], onDelete: Cascade)
   classId     String
   class       Class    @relation("ClassLessons", fields: [classId], references: [id], onDelete: Cascade)
   completions LessonCompletion[]
+  status      LessonStatus @default(ASSIGNED)
   mentorId    String
   mentor      User     @relation("UploadedLessons", fields: [mentorId], references: [id], onDelete: Cascade) 
+  createdAt   DateTime @default(now())
 }
 
 model LessonCompletion {
@@ -258,7 +280,7 @@ model Profile {
   mimetype  String
   size      Int
   user      User     @relation(fields: [userId], references: [id])
-  @@unique([userId, type]) //mastiin cuman 1 profile dengan 1 jenis yang terkait pada userId
+  @@unique([userId, type]) 
 }
 
 model Notification {

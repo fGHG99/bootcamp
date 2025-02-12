@@ -245,6 +245,7 @@ router.get('/class', async (req, res) => {
         challenges: true,
         lessons: true,
         certificates: true,
+        classCover: true,
       },
     });
 
@@ -717,6 +718,7 @@ router.get('/class/:batchId/batch', async (req, res) => {
         challenges: true, // Include related challenges
         lessons: true, // Include related lessons
         certificates: true, // Include related certificates
+        cover: true,
       },
     });
 

@@ -20,7 +20,11 @@ const io = socket.init(server); // Initialize Socket.IO
 // Static file configuration
 app.use("/profile", express.static(path.join(__dirname, "../public/profile")));
 app.use("/lesson", express.static(path.join(__dirname, "../public/lesson")));
+app.use("/challenge", express.static(path.join(__dirname, "../public/challenge")));
 app.use("/certificate", express.static(path.join(__dirname, "../public/certificate")));
+app.use("/challenge/submissions", express.static(path.join(__dirname, "../public/challenge/submissions")));
+app.use("/lesson/submissions", express.static(path.join(__dirname, "../public/lesson/submissions")));
+app.use("/cover-class", express.static(path.join(__dirname, "../public/cover-class")));
 
 // CORS Configuration
 const corsOptions = {

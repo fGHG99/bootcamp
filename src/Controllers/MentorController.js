@@ -555,7 +555,14 @@ router.get('/lesson/:lessonId/completions', async (req, res) => {
             description: true,
             deadline: true,
           }
-        } 
+        },
+        submissionFiles: {
+          select: {
+            id: true,
+            filename: true,
+            filepath: true,
+          }
+        }
       }
     });
 
@@ -579,7 +586,14 @@ router.get('/lesson/:lessonId/completions', async (req, res) => {
             description: true,
             deadline: true,
           }
-        } 
+        }, 
+        submissionFiles: {
+          select: {
+            id: true,
+            filename: true,
+            filepath: true,
+          }
+        }
       }
     });
 
@@ -602,6 +616,13 @@ router.get('/lesson/:lessonId/completions', async (req, res) => {
             title: true,
             description: true,
             deadline: true,
+          }
+        }, 
+        submissionFiles: {
+          select: {
+            id: true,
+            filename: true,
+            filepath: true,
           }
         } 
       }
@@ -626,6 +647,14 @@ router.get('/lesson/:lessonId/completions', async (req, res) => {
             title: true,
             description: true,
             deadline: true,
+            
+          }
+        }, 
+        submissionFiles: {
+          select: {
+            id: true,
+            filename: true,
+            filepath: true,
           }
         } 
       }
@@ -686,8 +715,16 @@ router.get('/challenge/:challengeId/completions', async (req, res) => {
             title: true,
             description: true,
             deadline: true,
+            
           }
-        } 
+        }, 
+        submissionFiles: {
+          select: {
+            id: true,
+            filename: true,
+            filepath: true,
+          }
+        }
       }
     });
 
@@ -710,6 +747,14 @@ router.get('/challenge/:challengeId/completions', async (req, res) => {
             title: true,
             description: true,
             deadline: true,
+            
+          }, 
+        }, 
+        submissionFiles: {
+          select: {
+            id: true,
+            filename: true,
+            filepath: true,
           }
         } 
       }
@@ -734,6 +779,14 @@ router.get('/challenge/:challengeId/completions', async (req, res) => {
             title: true,
             description: true,
             deadline: true,
+            
+          }, 
+        }, 
+        submissionFiles: {
+          select: {
+            id: true,
+            filename: true,
+            filepath: true,
           }
         } 
       }
@@ -741,7 +794,7 @@ router.get('/challenge/:challengeId/completions', async (req, res) => {
 
     const gradedCompletions = await prismaClient.challengeCompletion.findMany({
       where: {
-        lessonId,
+        challengeId,
         status: 'GRADED'
       },
       include: { 
@@ -751,13 +804,21 @@ router.get('/challenge/:challengeId/completions', async (req, res) => {
             fullName: true,
             nickname: true,
           }
-        }, 
-        lesson: {
+        },
+        challenge: {
           select: {
             id: true,
             title: true,
             description: true,
             deadline: true,
+            
+          }, 
+        }, 
+        submissionFiles: {
+          select: {
+            id: true,
+            filename: true,
+            filepath: true,
           }
         } 
       }
@@ -781,5 +842,142 @@ router.get('/challenge/:challengeId/completions', async (req, res) => {
   }
 });
 
+router.get('/class-lesson/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const { classId, lessonStatus } = req.query; // Accept filters from query parameters
+
+  try {
+    // Step 1: Get all classes for the user
+    const userClasses = await prismaClient.class.findMany({
+      where: {
+        users: {
+          some: {
+            id: userId,
+          },
+        },
+        ...(classId && { id: classId }), // Filter by classId if provided
+      },
+      include: {
+        lessons: { 
+          include: {
+            mentor: { select : { fullName: true, nickname: true } },
+          } 
+        },
+      },
+    });
+
+    if (!userClasses.length) {
+      return res.status(404).json({ message: 'No classes found for this user.' });
+    }
+
+    // Step 2: Extract all lessons from the classes
+    const allLessons = userClasses.flatMap((userClass) => userClass.lessons);
+
+    // Step 3: For each lesson, check its completion status for the given user
+    const lessonsWithCompletion = await Promise.all(
+      allLessons.map(async (lesson) => {
+        const lessonCompletion = await prismaClient.lessonCompletion.findUnique({
+          where: {
+            userId_lessonId: {
+              userId: userId,
+              lessonId: lesson.id,
+            },
+          },
+        });
+
+        return {
+          ...lesson,
+          completionStatus: lessonCompletion ? lessonCompletion.status : lesson.status,
+        };
+      })
+    );
+
+    // Step 4: Apply lessonStatus filter if provided
+    const filteredLessons = lessonStatus
+      ? lessonsWithCompletion.filter((lesson) => lesson.completionStatus === lessonStatus)
+      : lessonsWithCompletion;
+
+    // Step 5: Group lessons back by class
+    const result = userClasses.map((userClass) => ({
+      classId: userClass.id,
+      className: userClass.className,
+      lessons: filteredLessons.filter((lesson) => lesson.classId === userClass.id),
+    }));
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error fetching classes and lessons:', error);
+    res.status(500).json({ message: 'An error occurred while fetching data.' });
+  }
+});
+
+router.get('/class-challenge/:userId', async (req, res) => {
+  const { userId } = req.params;
+  const { classId, challengeStatus } = req.query; // Accept filters from query parameters
+
+  try {
+    // Step 1: Get all classes for the user
+    const userClasses = await prismaClient.class.findMany({
+      where: {
+        users: {
+          some: {
+            id: userId,
+          },
+        },
+        ...(classId && { id: classId }), // Filter by classId if provided
+      },
+      include: {
+        challenges: { 
+          include: {
+            mentor: { select : { fullName: true, nickname: true } },
+          } 
+        },
+      },
+    });
+
+    if (!userClasses.length) {
+      return res.status(404).json({ message: 'No classes found for this user.' });
+    }
+
+    // Step 2: Extract all lessons from the classes
+    const allChallenges = userClasses.flatMap((userClass) => userClass.challenges);
+
+    // Step 3: For each lesson, check its completion status for the given user
+    const challengeWithCompletion = await Promise.all(
+      allChallenges.map(async (challenge) => {
+        const challengeCompletion = await prismaClient.challengeCompletion.findUnique({
+          where: {
+            userId_challengeId: {
+              userId: userId,
+              challengeId: challenge.id,
+            },
+          },
+        });
+
+        return {
+          ...challenge,
+          completionStatus: challengeCompletion ? challengeCompletion.status : challenge.status,
+        };
+      })
+    );
+
+    // Step 4: Apply lessonStatus filter if provided
+    const filteredChallenges = challengeStatus
+      ? challengeWithCompletion.filter((challenge) => challenge.completionStatus === challengeStatus)
+      : challengeWithCompletion;
+
+    // Step 5: Group lessons back by class
+    const result = userClasses.map((userClass) => ({
+      classId: userClass.id,
+      className: userClass.className,
+      challenges: filteredChallenges.filter((challenge) => challenge.classId === userClass.id),
+    }));
+
+    res.status(200).json(result);
+  } catch (error) {
+    console.error('Error fetching classes and challenge', error);
+    res.status(500).json({ message: 'An error occurred while fetching data.' });
+  }
+});
 module.exports = router;
   

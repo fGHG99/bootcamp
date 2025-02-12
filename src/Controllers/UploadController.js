@@ -5,6 +5,7 @@ const fs = require("fs");
 const { verifyToken, verifyRoles } = require("../Middlewares/Auth");
 const router = express.Router();
 const prisma = new PrismaClient();
+const path = require("path");
 
 // Utility to ensure directory exists
 const ensureDirectoryExistence = (folderPath) => {
@@ -19,12 +20,12 @@ const sanitizeFilename = (filename) => {
 };
 
 // Centralized allowed MIME types
-const allowedMimeTypes = {
-  profile: ["image/jpeg", "image/png", "application/pdf"],
-  lesson: ["image/jpeg", "image/png", "image/jpg", "application/pdf", "application/pptx"],
-  challenge: ["image/jpeg", "image/png", "image/jpg", "application/pdf", "application/pptx"],
-  certificate: ["application/pdf", "image/jpeg", "image/png"],
-};
+// const allowedMimeTypes = {
+//   profile: ["image/jpeg", "image/png", "application/pdf"],
+//   lesson: ["image/jpeg", "image/png", "image/jpg", "application/pdf", "application/pptx"],
+//   challenge: ["image/jpeg", "image/png", "image/jpg", "application/pdf", "application/pptx"],
+//   certificate: ["application/pdf", "image/jpeg", "image/png"],
+// };
 
 // Configure multer storage for profile uploads
 const profileStorage = multer.diskStorage({
@@ -460,6 +461,112 @@ router.post("/challenge", challengeUpload.array("files", 3), verifyToken, verify
       error: "Failed to upload challenge.",
       details: error.message,
     });
+  }
+});
+
+const coverStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const targetFolder = "public/cover-class";
+    ensureDirectoryExistence(targetFolder);
+    cb(null, targetFolder);
+  },
+  filename: (req, file, cb) => {
+    const sanitizedFilename = sanitizeFilename(file.originalname);
+    cb(null, `${Date.now()}-${sanitizedFilename}`);
+  },
+});
+
+const coverUpload = multer({
+  storage: coverStorage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg"];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only JPEG, PNG, JPG are allowed."));
+    }
+  },
+});
+
+router.post(
+  "/class-cover",
+  coverUpload.single("coverImage"), // Accepts an image file named 'coverImage'
+  async (req, res) => {
+    try {
+      const { classId } = req.body;
+      if (!classId) {
+        return res.status(400).json({ error: "classId is required" });
+      }
+
+      // Check if class exists
+      const existingClass = await prisma.class.findUnique({ where: { id: classId } });
+      if (!existingClass) {
+        return res.status(404).json({ error: "Class not found" });
+      }
+
+      // Find existing cover
+      const existingCover = await prisma.classCover.findUnique({ where: { classId } });
+
+      // Prepare new cover data
+      let coverData = {};
+      if (req.file) {
+        coverData = {
+          filePath: `/public/cover-class/${req.file.filename}`,
+          fileName: req.file.filename,
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+        };
+      } else {
+        return res.status(400).json({ error: "Either gradientColors or coverImage must be provided." });
+      }
+
+      let updatedCover;
+      if (existingCover) {
+        // Delete previous file if a new file is uploaded
+        if (req.file && existingCover.filePath) {
+          const oldFilePath = path.join(__dirname, "..", existingCover.filePath);
+          if (fs.existsSync(oldFilePath)) {
+            fs.unlinkSync(oldFilePath);
+          }
+        }
+
+        // Update existing cover
+        updatedCover = await prisma.classCover.update({
+          where: { classId },
+          data: coverData,
+        });
+      } else {
+        // Create new cover
+        updatedCover = await prisma.classCover.create({
+          data: {
+            classId,
+            ...coverData,
+          },
+        });
+      }
+
+      res.json(updatedCover);
+    } catch (error) {
+      console.error("Error saving class cover:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+router.get("/class-cover/:classId", async (req, res) => {
+  try {
+    const { classId } = req.params;
+    const classCover = await prisma.classCover.findUnique({ where: { classId } });
+
+    if (!classCover) {
+      return res.status(404).json({ error: "Class cover not found" });
+    }
+
+    res.json(classCover);
+  } catch (error) {
+    console.error("Error fetching class cover:", error);
+    res.status(500).json({ error: "Internal server error" });
   }
 });
 

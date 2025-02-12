@@ -22,7 +22,7 @@ const sanitizeFilename = (filename) => {
 
 const lessonSubmissionStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const targetFolder = "public/lesson/submissions";
+    const targetFolder = "public/lesson_submissions";
     ensureDirectoryExistence(targetFolder);
     cb(null, targetFolder);
   },
@@ -47,7 +47,7 @@ const lessonSubmissionUpload = multer({
 
 const challengeSubmissionStorage = multer.diskStorage({
   destination: (req, file, cb) => {
-    const targetFolder = "public/challenge/submissions";
+    const targetFolder = "public/challenge_submissions";
     ensureDirectoryExistence(targetFolder);
     cb(null, targetFolder);
   },
@@ -300,7 +300,7 @@ router.get('/challenge/:challengeId/:userId/status', async (req, res) => {
       return res.status(404).json({ error: 'challenge not found' });
     }
 
-    res.status(200).json({ status: challenge.status, files: challenge.completions.map((c) => c.submissionFiles) });
+    res.status(200).json(challenge);
   } catch (error) {
     console.error('Error fetching challenge status:', error);
     res.status(500).json({ error: error.message });
