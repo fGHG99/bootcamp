@@ -245,7 +245,7 @@ router.get('/class', async (req, res) => {
         challenges: true,
         lessons: true,
         certificates: true,
-        classCover: true,
+        cover: true,
       },
     });
 
@@ -468,6 +468,7 @@ router.get('/batch', async (req, res) => {
             },
           },
           certificates: true,
+          cover: true,
         },
       });
 
@@ -482,11 +483,11 @@ router.get('/batchs/:id', async (req, res) => {
   try {
     const { id } = req.params; // Get batch ID from the route parameter
 
-    // Fetch the batch by ID, including associated classes and their lessons
     const batch = await prismaClient.batch.findUnique({
       where: { id },
       include: {
         classes: true,
+        cover: true,
       },
     });
 
@@ -712,7 +713,7 @@ router.get('/class/:batchId/batch', async (req, res) => {
             fullName: true,
             email: true,
             role: true,
-          },
+          },  
         }, // Include related mentors
         batches: true, // Include related batches
         challenges: true, // Include related challenges
@@ -840,6 +841,7 @@ router.get('/batch/:mentorId', async (req, res) => {
         challenges: true,     // Sertakan tantangan
         classes: true,        // Sertakan kelas
         lessons: true,        // Sertakan pelajaran
+        cover: true,
       },
     });
 

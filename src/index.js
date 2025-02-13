@@ -22,9 +22,11 @@ app.use("/profile", express.static(path.join(__dirname, "../public/profile")));
 app.use("/lesson", express.static(path.join(__dirname, "../public/lesson")));
 app.use("/challenge", express.static(path.join(__dirname, "../public/challenge")));
 app.use("/certificate", express.static(path.join(__dirname, "../public/certificate")));
-app.use("/challenge/submissions", express.static(path.join(__dirname, "../public/challenge/submissions")));
-app.use("/lesson/submissions", express.static(path.join(__dirname, "../public/lesson/submissions")));
+app.use("/challenge_submissions", express.static(path.join(__dirname, "../public/challenge_submissions")));
+app.use("/lesson_submissions", express.static(path.join(__dirname, "../public/lesson_submissions")));
 app.use("/cover-class", express.static(path.join(__dirname, "../public/cover-class")));
+app.use("/cover-batch", express.static(path.join(__dirname, "../public/cover-batch")));
+app.use("/cover", express.static(path.join(__dirname, "../public/cover")));
 
 // CORS Configuration
 const corsOptions = {

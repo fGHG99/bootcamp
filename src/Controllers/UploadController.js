@@ -489,28 +489,57 @@ const coverUpload = multer({
   },
 });
 
+const batchStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const targetFolder = "public/cover-batch";
+    ensureDirectoryExistence(targetFolder);
+    cb(null, targetFolder);
+  },
+  filename: (req, file, cb) => {
+    const sanitizedFilename = sanitizeFilename(file.originalname);
+    cb(null, `${Date.now()}-${sanitizedFilename}`);
+  },
+});
+
+const batchUpload = multer({
+  storage: batchStorage,
+  limits: { fileSize: 100 * 1024 * 1024 }, 
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = ["image/jpeg", "image/png", "image/jpg"];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only JPEG, PNG, JPG are allowed."));
+    }
+  },
+});
+
 router.post(
   "/class-cover",
-  coverUpload.single("coverImage"), // Accepts an image file named 'coverImage'
+  coverUpload.single("coverImage"),
   async (req, res) => {
     try {
-      const { classId } = req.body;
+      const { classId, fileName } = req.body;
+
       if (!classId) {
         return res.status(400).json({ error: "classId is required" });
       }
 
-      // Check if class exists
       const existingClass = await prisma.class.findUnique({ where: { id: classId } });
       if (!existingClass) {
         return res.status(404).json({ error: "Class not found" });
       }
 
-      // Find existing cover
-      const existingCover = await prisma.classCover.findUnique({ where: { classId } });
-
-      // Prepare new cover data
       let coverData = {};
-      if (req.file) {
+
+      if (fileName) {
+        // Handle color selection case
+        coverData = {
+          filePath: `/public/cover/${fileName}`,
+          fileName,
+        };
+      } else if (req.file) {
+        // Handle uploaded file case
         coverData = {
           filePath: `/public/cover-class/${req.file.filename}`,
           fileName: req.file.filename,
@@ -518,26 +547,18 @@ router.post(
           size: req.file.size,
         };
       } else {
-        return res.status(400).json({ error: "Either gradientColors or coverImage must be provided." });
+        return res.status(400).json({ error: "Either fileName or coverImage must be provided." });
       }
+
+      const existingCover = await prisma.classCover.findUnique({ where: { classId } });
 
       let updatedCover;
       if (existingCover) {
-        // Delete previous file if a new file is uploaded
-        if (req.file && existingCover.filePath) {
-          const oldFilePath = path.join(__dirname, "..", existingCover.filePath);
-          if (fs.existsSync(oldFilePath)) {
-            fs.unlinkSync(oldFilePath);
-          }
-        }
-
-        // Update existing cover
         updatedCover = await prisma.classCover.update({
           where: { classId },
           data: coverData,
         });
       } else {
-        // Create new cover
         updatedCover = await prisma.classCover.create({
           data: {
             classId,
@@ -549,6 +570,67 @@ router.post(
       res.json(updatedCover);
     } catch (error) {
       console.error("Error saving class cover:", error);
+      res.status(500).json({ error: "Internal server error" });
+    }
+  }
+);
+
+router.post(
+  "/batch-cover",
+  batchUpload.single("coverImage"),
+  async (req, res) => {
+    try {
+      const { batchId, fileName } = req.body;
+
+      if (!batchId) {
+        return res.status(400).json({ error: "batchId is missing" });
+      }
+
+      const existingBatch = await prisma.batch.findUnique({ where: { id: batchId } });
+      if (!existingBatch) {
+        return res.status(404).json({ error: "Batch not found" });
+      }
+
+      let coverData = {};
+
+      if (fileName) {
+        // Handle color selection case
+        coverData = {
+          filePath: `/public/cover/${fileName}`,
+          fileName,
+        };
+      } else if (req.file) {
+        // Handle uploaded file case
+        coverData = {
+          filePath: `/public/cover-batch/${req.file.filename}`,
+          fileName: req.file.filename,
+          mimeType: req.file.mimetype,
+          size: req.file.size,
+        };
+      } else {
+        return res.status(400).json({ error: "Either fileName or coverImage must be provided." });
+      }
+
+      const existingCover = await prisma.batchCover.findUnique({ where: { batchId } });
+
+      let updatedCover;
+      if (existingCover) {
+        updatedCover = await prisma.batchCover.update({
+          where: { batchId },
+          data: coverData,
+        });
+      } else {
+        updatedCover = await prisma.batchCover.create({
+          data: {
+            batchId,
+            ...coverData,
+          },
+        });
+      }
+
+      res.json(updatedCover);
+    } catch (error) {
+      console.error("Error saving batch cover:", error);
       res.status(500).json({ error: "Internal server error" });
     }
   }
