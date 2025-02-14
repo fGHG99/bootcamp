@@ -789,6 +789,7 @@ router.get('/class/:id/class', async (req, res) => {
           }
          },
         certificates: true, // Include related certificates
+        cover: true,
       },
     });
 

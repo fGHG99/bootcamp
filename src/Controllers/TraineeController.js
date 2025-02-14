@@ -834,6 +834,7 @@ router.get("/class/user/:userId", async (req, res) => {
         challenges: true,
         lessons: true,
         certificates: true,
+        cover: true,
       },
     });
 
