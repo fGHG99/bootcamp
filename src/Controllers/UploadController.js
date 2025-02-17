@@ -652,4 +652,97 @@ router.get("/class-cover/:classId", async (req, res) => {
   }
 });
 
+const presentationStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const targetFolder = "public/presentation";
+    ensureDirectoryExistence(targetFolder);
+    cb(null, targetFolder);
+  },
+  filename: (req, file, cb) => {
+    const sanitizedFilename = sanitizeFilename(file.originalname);
+    cb(null, `${Date.now()}-${sanitizedFilename}`);
+  },
+});
+
+const presentationUpload = multer({
+  storage: presentationStorage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "application/zip",
+      "video/mp4", 
+    ];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only JPEG, PNG, PDF, ZIP, and MP4 are allowed."));
+    }
+  },
+});
+
+
+router.post("/presentation", presentationUpload.array("files", 3), verifyToken , verifyRoles(['MENTOR']), async (req, res) => {
+  const { title, description, deadline, classId, batchId, mentorId } = req.body;
+  const { files } = req;
+
+  if (!title || !description || !deadline || !classId || !batchId) {
+    return res.status(400).json({ error: "All lesson fields are required." });
+  }
+
+  if (isNaN(Date.parse(deadline))) {
+    return res.status(400).json({ error: "Invalid deadline format. Please provide a valid date." });
+  }
+
+  if (!files || files.length === 0) {
+    return res.status(400).json({ error: "At least one file is required." });
+  }
+
+  try {
+    const presentation = await prisma.finalPresentation.create({
+      data: {
+        title,
+        description,
+        deadline: new Date(deadline),
+        class : {
+          connect : { id : classId}
+        },
+        batch : {
+          connect : { id : batchId}
+        },
+        mentor : {
+          connect: { id : mentorId}
+        }
+      },
+    });
+
+    const uploads = files.map((file) =>
+      prisma.file.create({
+        data: {
+          filename: sanitizeFilename(file.originalname),
+          filepath: file.path,
+          mimetype: file.mimetype,
+          size: file.size,
+          presentation: {
+            connect: { id: presentation.id }
+          }
+        },
+      })
+    );
+
+    const results = await Promise.all(uploads);
+
+    res.status(201).json({
+      message: "Lesson and files uploaded successfully.",
+      presentation,
+      files: results,
+    });
+  } catch (error) {
+    res.status(500).json({ error: "Failed to create lesson and upload files.", details: error.message });
+    console.log(error);
+  }
+});
+
 module.exports = router;

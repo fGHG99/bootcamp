@@ -8,6 +8,7 @@ const adminRoutes = require('./Controllers/AdminController');
 const traineeRoutes = require('./Controllers/TraineeController');
 const Test = require('./Routes/Test');
 const MentorNote = require('./Controllers/MentorController');
+const examinerRoutes = require('./Controllers/ExaminerController');
 const UploadRoute = require('./Controllers/UploadController');
 const Complete = require("./Controllers/CompletionLesson");
 const Middleware = require('./Middlewares/RouterClientSide');
@@ -49,6 +50,7 @@ app.use('/mentor', MentorNote);
 app.use('/uploads', UploadRoute);
 app.use('/complete', Complete);
 app.use('/api', Middleware);
+app.use('/examiner', examinerRoutes)
 
 // Get the local IP address of the server
 function getLocalIpAddress() {

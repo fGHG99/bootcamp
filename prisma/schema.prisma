@@ -82,12 +82,14 @@ model User {
   receivedNotes    Note[]   @relation("TraineeNotes")
   lesCompletions   LessonCompletion[]
   chCompletions    ChallengeCompletion[]
+  fpCompletions    FinalCompletion[]
   certificates     Certificate[]
   profiles         Profile[]
   classes          Class[]     @relation("UserClasses")
   notification     Notification[]
   uploadedLessons  Lesson[]    @relation("UploadedLessons") // Bidirectional relation to Lesson
-  uploadedChallenges Challenge[] @relation("UploadedChallenges") // Bidirectional relation to Challenge
+  uploadedChallenges Challenge[] @relation("UploadedChallenges") // Bidirectional relation to 
+  presentationMentor FinalPresentation[] @relation("FinalPresentation")
   schedule         Schedule[]
 }
 
@@ -116,8 +118,10 @@ model Batch {
   challenges   Challenge[] @relation("BatchChallenges")
   classes      BatchClass[]
   lessons      Lesson[]  @relation("BatchLessons")
+  presentation FinalPresentation[] @relation("FinalPresentation")
   certificates Certificate[]
   cover  BatchCover? @relation("BatchCover")
+
 }
 
 model Class {
@@ -128,6 +132,7 @@ model Class {
   batches     BatchClass[]
   challenges  Challenge[] @relation("ClassChallenges")
   lessons     Lesson[]    @relation("ClassLessons")
+  presentation FinalPresentation[] @relation("FinalPresentation")
   certificates Certificate[]
   status      Status      @default(Tba)
   users       User[]      @relation("UserClasses")
@@ -207,6 +212,8 @@ model Note {
   lessonCompletion      LessonCompletion?     @relation(fields: [lessonCompletionId], references: [id])
   challengeCompletionId String?               @unique // Ensure uniqueness for notes tied to ChallengeCompletion
   challengeCompletion   ChallengeCompletion?  @relation(fields: [challengeCompletionId], references: [id])
+  finalCompletionId     String?               @unique
+  finalCompletion       FinalCompletion?      @relation(fields: [finalCompletionId], references: [id])
   createdAt             DateTime              @default(now())
 }
 
@@ -266,10 +273,14 @@ model File {
   lesson    Lesson?   @relation(fields: [lessonId], references: [id], onDelete: Cascade)
   challengeId String?
   challenge Challenge? @relation(fields: [challengeId], references: [id], onDelete: Cascade)
+  presentationId String?
+  presentation FinalPresentation? @relation(fields: [presentationId], references: [id], onDelete: Cascade)
   lesCompletionId String?
   completionLs LessonCompletion? @relation(fields: [lesCompletionId], references: [id], onDelete: Cascade)
   chCompletionId String?
   completionCh ChallengeCompletion? @relation(fields: [chCompletionId], references: [id], onDelete: Cascade)
+  fpCompletionId String?
+  finalCompletion FinalCompletion? @relation(fields: [fpCompletionId], references: [id], onDelete: Cascade)
 }
 
 model Profile {
@@ -310,5 +321,35 @@ model ScheduleDay {
   date  DateTime
   start String @db.VarChar(5)  // e.g., "09:00"
   end   String @db.VarChar(5)  // e.g., "17:00"
+}
+
+model FinalPresentation {
+  id String @id @default(uuid())
+  title String @db.VarChar(100)
+  description String? @db.VarChar(300)
+  deadline DateTime
+  files File[]
+  batchId String
+  batch  Batch  @relation("FinalPresentation", fields: [batchId], references: [id])
+  classId String 
+  class Class @relation("FinalPresentation", fields: [classId], references: [id])
+  mentorId String
+  mentor User @relation("FinalPresentation", fields: [mentorId], references: [id])
+  completions FinalCompletion[]
+  createdAt   DateTime @default(now())
+}
+
+model FinalCompletion {
+  id String @id @default(cuid())
+  userId String 
+  user User @relation(fields: [userId], references:[id])
+  presentationId String
+  final FinalPresentation @relation(fields: [presentationId], references: [id])
+  completed   Boolean  @default(false)
+  submissionFiles File[]
+  completedAt DateTime?
+  status LessonStatus @default(ASSIGNED)
+  notes Note[] @relation 
+  @@unique([userId, presentationId])
 }
 

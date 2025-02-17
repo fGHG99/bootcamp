@@ -406,4 +406,90 @@ async function checkAndIssueCertificate(userId, progressData) {
   return null;
 }
 
+const presentationSubmissionStorage = multer.diskStorage({
+  destination: (req, file, cb) => {
+    const targetFolder = "public/presentation_submissions";
+    ensureDirectoryExistence(targetFolder);
+    cb(null, targetFolder);
+  },
+  filename: (req, file, cb) => {
+    const sanitizedFilename = sanitizeFilename(file.originalname);
+    cb(null, `${Date.now()}-${sanitizedFilename}`);
+  },
+});
+
+const presentationSubmissionUpload = multer({
+  storage: presentationSubmissionStorage,
+  limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
+  fileFilter: (req, file, cb) => {
+    const allowedMimeTypes = ["application/pdf", "image/jpeg", "image/png", "application/zip"];
+    if (allowedMimeTypes.includes(file.mimetype)) {
+      cb(null, true);
+    } else {
+      cb(new Error("Invalid file type. Only JPEG, PNG, PDF, and PPTX are allowed."));
+    }
+  },
+});
+
+router.post('/presentation/:presentationId', presentationSubmissionUpload.array('files', 10), async (req, res) => {
+  const { userId } = req.body;
+  const { presentationId } = req.params;
+  const { files } = req;
+
+  if (!userId || !presentationId) {
+    return res.status(400).json({ error: 'userId and id are required.' });
+  }
+
+  try {
+    // Upsert lessonCompletion and explicitly select the ID
+    const finalCompletion = await prisma.finalCompletion.upsert({
+      where: {
+        userId_presentationId: {
+          userId,
+          presentationId,
+        },
+      },
+      select: {
+        id: true, // Explicitly select the ID
+      },
+      update: {
+        completed: true,
+        completedAt: new Date(),
+        status: 'SUBMITTED',
+      },
+      create: {
+        userId,
+        presentationId,
+        completed: true,
+        completedAt: new Date(),
+        status: 'SUBMITTED',
+      },
+    });
+
+    // If files are uploaded, save them in the File model
+    if (files && files.length > 0) {
+      // Map the files and associate them with the LessonCompletion entry
+      const uploadedFiles = files.map((file) => ({
+        filename: sanitizeFilename(file.originalname),
+        filepath: file.path,
+        mimetype: file.mimetype,
+        size: file.size,
+        fpCompletionId: finalCompletion.id, // Associate with LessonCompletion
+      }));
+    
+      // Save the files in the File table
+      await prisma.file.createMany({
+        data: uploadedFiles,
+      });
+    }
+
+    res.status(200).json({
+      files,
+    });
+  } catch (error) {
+    console.error('Error completing presentation:', error);
+    res.status(500).json({ error: error.message });
+  }
+}); 
+
 module.exports = router;
