@@ -46,12 +46,12 @@ enum ProfileType {
 
 model User {
   id               String   @id @default(uuid())
-  fullName         String?  @db.VarChar(50)
+  fullName         String?  
   nickname         String?
-  pob              String?  @db.VarChar(30)
+  pob              String? 
   dob              DateTime?
   address          String?
-  mobile           String?  @db.VarChar(15)
+  mobile           String?  
   lastEdu          String?
   lastEduInst      String?
   major            String?
@@ -67,7 +67,7 @@ model User {
   skill6           Int?
   skill7           Int?
   skill8           Int?
-  confident        String?  @db.VarChar(300)
+  confident        String?  
   email            String   @unique
   password         String
   Token            Token[]

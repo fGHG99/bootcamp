@@ -74,6 +74,27 @@ router.post("/login", async (req, res) => {
   }
 });
 
+router.get("/status", protect, async (req, res) => {
+  try {
+    const { id } = req.user;
+
+    // Fetch user status by ID
+    const user = await prismaClient.user.findUnique({
+      where: { id },
+      select: { userstatus: true },
+    });
+
+    if (!user) {
+      return res.status(404).json({ message: "User not found" });
+    }
+
+    res.json({ Status: user.userstatus });
+  } catch (error) {
+    console.error("Error fetching user status:", error);
+    res.status(500).json({ message: "Server error" });
+  }
+});
+
 // Refresh Access Token Route
 router.post("/refresh-token", async (req, res) => {
   const { refreshToken } = req.body;
@@ -133,16 +154,14 @@ router.put("/verify", protect, async (req, res) => {
     college,
     currentMajor,
     github,
-    skills: {
-      skill1 = null,
-      skill2 = null,
-      skill3 = null,
-      skill4 = null,
-      skill5 = null,
-      skill6 = null,
-      skill7 = null,
-      skill8 = null,
-    } = {},
+      skill1,
+      skill2,
+      skill3,
+      skill4,
+      skill5,
+      skill6,
+      skill7,
+      skill8,
     confident,
   } = req.body;
 
@@ -217,7 +236,7 @@ router.put("/edit/:id", async (req, res) => {
     });
 
     // Update the PROFESSIONAL profile if any profile-related fields are provided
-    let updatedProfile = null;
+    let updatedProfile;
     if (profileFilePath || profileMimeType || profileSize) {
       updatedProfile = await prismaClient.profile.updateMany({
         where: {
