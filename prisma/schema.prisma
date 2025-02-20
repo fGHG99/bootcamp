@@ -328,6 +328,7 @@ model FinalPresentation {
   title String @db.VarChar(100)
   description String? @db.VarChar(300)
   deadline DateTime
+  status LessonStatus @default(ASSIGNED)
   files File[]
   batchId String
   batch  Batch  @relation("FinalPresentation", fields: [batchId], references: [id])

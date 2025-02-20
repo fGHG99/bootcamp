@@ -422,11 +422,11 @@ const presentationSubmissionUpload = multer({
   storage: presentationSubmissionStorage,
   limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
   fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = ["application/pdf", "image/jpeg", "image/png", "application/zip"];
+    const allowedMimeTypes = ["application/pdf", "image/jpeg", "image/png", "application/zip", "video/mp4"];
     if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Invalid file type. Only JPEG, PNG, PDF, and PPTX are allowed."));
+      cb(new Error("Invalid file type. Only JPEG, PNG, PDF, PPTX, and MP4 are allowed."));
     }
   },
 });

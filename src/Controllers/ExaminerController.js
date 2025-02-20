@@ -14,18 +14,18 @@ router.get("/final-presentations", async (req, res) => {
     if (classId) whereClause.classId = classId;
 
     const finalPresentations = await prisma.finalPresentation.findMany({
-      where: whereClause,
+      where: whereClause, 
       include: {
         batch: {
           select: {
             id: true,
-            name: true,
+            batchTitle: true,
           },
         },
         class: {
           select: {
             id: true,
-            name: true,
+            className: true,
           },
         },
         mentor: {
@@ -41,14 +41,64 @@ router.get("/final-presentations", async (req, res) => {
             filepath: true,
           },
         },
-        completions: {
+      },
+    });
+
+    res.status(200).json(finalPresentations);
+  } catch (error) {
+    console.error("Error fetching final presentations:", error);
+    res.status(500).json({ error: "Failed to fetch final presentations" });
+  }
+});
+
+router.get("/presentations/completions", async (req, res) => {
+  try {
+    const { batchId, classId } = req.query;
+
+    const whereClause = {};
+    if (batchId) {
+      whereClause.final = {
+        batch: {
+          id: batchId
+        }
+      };
+    }
+
+    if (classId) {
+      whereClause.final = {
+        ...whereClause.final,
+        class: {
+          id: classId
+        }
+      };
+    }
+
+    const finalPresentations = await prisma.finalCompletion.findMany({
+      where: whereClause,
+      include: {
+        user: {
           select: {
             id: true,
-            userId: true,
-            completed: true,
-            completedAt: true,
-          },
+            fullName: true,
+          }
         },
+        final: {
+          include: {
+            class: {
+              select: {
+                id: true,
+                className: true,
+              }
+            },
+            batch: {
+              select: {
+                id: true,
+                batchTitle: true,
+              }
+            }
+          }
+        },
+        submissionFiles: true,
       },
     });
 

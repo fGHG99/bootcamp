@@ -244,6 +244,7 @@ router.get('/class', async (req, res) => {
         },
         challenges: true,
         lessons: true,
+        presentation: true,
         certificates: true,
         cover: true,
       },
@@ -784,6 +785,11 @@ router.get('/class/:id/class', async (req, res) => {
             files: true,
          }},
          lessons: {
+          include: {
+            files: true,
+          }
+         },
+         presentation: {
           include: {
             files: true,
           }

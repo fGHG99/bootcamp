@@ -142,7 +142,6 @@ router.get('/notes/:graderId/:visibility?', protect,  async (req, res) => {
       include: {
         grader: true, // Include grader details
         trainee: true, // Include trainee details
-        class: true, // Include class details
       },
     });
 

@@ -19,14 +19,6 @@ const sanitizeFilename = (filename) => {
   return filename.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_.-]/g, "");
 };
 
-// Centralized allowed MIME types
-// const allowedMimeTypes = {
-//   profile: ["image/jpeg", "image/png", "application/pdf"],
-//   lesson: ["image/jpeg", "image/png", "image/jpg", "application/pdf", "application/pptx"],
-//   challenge: ["image/jpeg", "image/png", "image/jpg", "application/pdf", "application/pptx"],
-//   certificate: ["application/pdf", "image/jpeg", "image/png"],
-// };
-
 // Configure multer storage for profile uploads
 const profileStorage = multer.diskStorage({
   destination: (req, file, cb) => {
@@ -735,7 +727,7 @@ router.post("/presentation", presentationUpload.array("files", 3), verifyToken ,
     const results = await Promise.all(uploads);
 
     res.status(201).json({
-      message: "Lesson and files uploaded successfully.",
+      message: "Final Presentation Uploaded successfully.",
       presentation,
       files: results,
     });
