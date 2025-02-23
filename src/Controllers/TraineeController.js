@@ -947,4 +947,35 @@ router.get("/users/:id", async (req, res) => {
   }
 });
 
+router.get("/presentation/:id", async (req, res) => {
+  try {
+    const { id } = req.params; // Get challengeId from the route parameters
+
+    // Fetch a single challenge by challengeId using findUnique
+    const presentation = await prismaClient.finalPresentation.findUnique({
+      where: { id },
+      include: {
+        mentor: {
+          select: {
+            fullName: true,
+            nickname: true,
+          }
+        },
+        files: true,
+      }
+    });
+
+    // If the challenge doesn't exist, return a 404 response
+    if (!presentation) {
+      return res.status(404).json({ error: "Presentation not found." });
+    }
+    // Return the challenge with mentor details
+    res.status(200).json(presentation);
+  } catch (error) {
+    res
+      .status(500)
+      .json({ error: "Failed to fetch presentation.", details: error.message });
+  }
+});
+
 module.exports = router;

@@ -134,7 +134,7 @@ model Class {
   lessons     Lesson[]    @relation("ClassLessons")
   presentation FinalPresentation[] @relation("FinalPresentation")
   certificates Certificate[]
-  status      Status      @default(Tba)
+  status      Status      @default(Ongoing)
   users       User[]      @relation("UserClasses")
   mentors     User[]      @relation("ClassMentors")
   cover  ClassCover? @relation("ClassCover")
@@ -331,11 +331,11 @@ model FinalPresentation {
   status LessonStatus @default(ASSIGNED)
   files File[]
   batchId String
-  batch  Batch  @relation("FinalPresentation", fields: [batchId], references: [id])
+  batch  Batch  @relation("FinalPresentation", fields: [batchId], references: [id], onDelete: Cascade)
   classId String 
-  class Class @relation("FinalPresentation", fields: [classId], references: [id])
+  class Class @relation("FinalPresentation", fields: [classId], references: [id], onDelete: Cascade)
   mentorId String
-  mentor User @relation("FinalPresentation", fields: [mentorId], references: [id])
+  mentor User @relation("FinalPresentation", fields: [mentorId], references: [id], onDelete: Cascade)
   completions FinalCompletion[]
   createdAt   DateTime @default(now())
 }
@@ -343,9 +343,9 @@ model FinalPresentation {
 model FinalCompletion {
   id String @id @default(cuid())
   userId String 
-  user User @relation(fields: [userId], references:[id])
+  user User @relation(fields: [userId], references:[id], onDelete: Cascade)
   presentationId String
-  final FinalPresentation @relation(fields: [presentationId], references: [id])
+  final FinalPresentation @relation(fields: [presentationId], references: [id], onDelete: Cascade)
   completed   Boolean  @default(false)
   submissionFiles File[]
   completedAt DateTime?

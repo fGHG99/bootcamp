@@ -147,7 +147,6 @@ router.post('/lesson/:lessonId', lessonSubmissionUpload.array('files', 10), asyn
   }
 }); 
 
-//mark a challenge as completed
 router.post('/challenge/:challengeId', challengeSubmissionUpload.array('files', 10), async (req, res) => {
   const { userId } = req.body;
   const { challengeId } = req.params;
@@ -303,6 +302,39 @@ router.get('/challenge/:challengeId/:userId/status', async (req, res) => {
     res.status(200).json(challenge);
   } catch (error) {
     console.error('Error fetching challenge status:', error);
+    res.status(500).json({ error: error.message });
+  }
+});
+
+router.get('/presentation/:presentationId/:userId/status', async (req, res) => {
+  const { presentationId, userId } = req.params;
+
+  if (!presentationId) {
+    return res.status(400).json({ error: 'presentationId is required' });
+  }
+
+  try {
+    const presentation = await prisma.finalCompletion.findUnique({
+      where: { 
+        userId_presentationId: {
+          userId,
+          presentationId,
+        }
+      },
+      select: { 
+        status: true,
+        submissionFiles: true,
+        notes: true,
+      },
+    });
+
+    if (!presentation) {
+      return res.status(404).json({ error: 'presentation not found' });
+    }
+
+    res.status(200).json(presentation);
+  } catch (error) {
+    console.error('Error fetching presentation status:', error);
     res.status(500).json({ error: error.message });
   }
 });
