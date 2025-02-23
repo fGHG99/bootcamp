@@ -926,7 +926,7 @@ router.put('/batch/:id', async (req, res) => {
 router.get('/role/roles', async (req, res) => {
   try {
       // Fetch enum roles
-      const enumRoles = Object.values(RoleEnum);
+      // const enumRoles = Object.values(RoleEnum);
 
       // Fetch roles from the database table
       const tableRoles = await prismaClient.roles.findMany({
@@ -939,13 +939,43 @@ router.get('/role/roles', async (req, res) => {
           : [];
 
       // Merge enum roles and table roles, removing duplicates using Set
-      const mergedRoles = [...new Set([...enumRoles, ...tableRoleNames])];
+      // const mergedRoles = [...new Set([...enumRoles, ...tableRoleNames])];
 
-      res.status(200).json({ roles: mergedRoles });
+      res.status(200).json({ roles: tableRoleNames });
   } catch (error) {
       console.error('Error fetching roles:', error);
       res.status(500).json({ error: "Failed to fetch roles" });
   }
 });
+
+router.post('/role/roles', async (req, res) => {
+  const { name } = req.body;
+
+  if (!name) {
+    return res.status(400).json({ error: 'Role name is required' });
+  }
+
+  try {
+    // Check if the role already exists in the database
+    const existingRole = await prismaClient.roles.findUnique({
+      where: { name }
+    });
+
+    if (existingRole) {
+      return res.status(400).json({ error: 'Role already exists' });
+    }
+
+    // Create the new role
+    const newRole = await prismaClient.roles.create({
+      data: { name }
+    });
+
+    res.status(201).json(newRole);
+  } catch (error) {
+    console.error('Error creating role:', error);
+    res.status(500).json({ error: 'Failed to create role' });
+  }
+});
+
 
 module.exports = router;

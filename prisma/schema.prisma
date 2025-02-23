@@ -94,8 +94,16 @@ model User {
 }
 
 model Roles {
-  id Int @id @default(autoincrement())
-  name String @unique
+  id    String  @id @default(cuid())
+  name  String  @unique
+  permissions RoutePermissions[]
+}
+
+model RoutePermissions {
+  id     String @id @default(cuid())
+  route  String @unique
+  roleId String
+  role   Roles  @relation(fields: [roleId], references: [id], onDelete: Cascade)
 }
 
 model Token {
