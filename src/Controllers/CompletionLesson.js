@@ -1,8 +1,8 @@
-const { PrismaClient } = require('@prisma/client');
-const express = require('express');
+const { PrismaClient } = require("@prisma/client");
+const express = require("express");
 const multer = require("multer");
-const socket = require('./SocketHandler')
-const getUserIdFromToken  = require('../Routes/GetUserId');
+const socket = require("./SocketHandler");
+const getUserIdFromToken = require("../Routes/GetUserId");
 const fs = require("fs");
 
 const prisma = new PrismaClient();
@@ -36,11 +36,20 @@ const lessonSubmissionUpload = multer({
   storage: lessonSubmissionStorage,
   limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
   fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = ["application/pdf", "image/jpeg", "image/png", "application/zip"];
+    const allowedMimeTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "application/zip",
+    ];
     if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Invalid file type. Only JPEG, PNG, PDF, and PPTX are allowed."));
+      cb(
+        new Error(
+          "Invalid file type. Only JPEG, PNG, PDF, and PPTX are allowed."
+        )
+      );
     }
   },
 });
@@ -61,189 +70,302 @@ const challengeSubmissionUpload = multer({
   storage: challengeSubmissionStorage,
   limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
   fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = ["application/pdf", "image/jpeg", "image/png", "application/zip"];
+    const allowedMimeTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "application/zip",
+    ];
     if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Invalid file type. Only JPEG, PNG, PDF, and PPTX are allowed."));
+      cb(
+        new Error(
+          "Invalid file type. Only JPEG, PNG, PDF, and PPTX are allowed."
+        )
+      );
     }
   },
 });
 
-router.post('/lesson/:lessonId', lessonSubmissionUpload.array('files', 10), async (req, res) => {
-  const { userId } = req.body;
-  const { lessonId } = req.params;
-  const { files } = req;
+router.post(
+  "/lesson/:lessonId",
+  lessonSubmissionUpload.array("files", 10),
+  async (req, res) => {
+    const { userId } = req.body;
+    const { lessonId } = req.params;
+    const { files } = req;
 
-  if (!userId || !lessonId) {
-    return res.status(400).json({ error: 'userId and lessonId are required.' });
-  }
-
-  try {
-    // Upsert lessonCompletion and explicitly select the ID
-    const lessonCompletion = await prisma.lessonCompletion.upsert({
-      where: {
-        userId_lessonId: {
-          userId,
-          lessonId,
-        },
-      },
-      select: {
-        id: true, // Explicitly select the ID
-      },
-      update: {
-        completed: true,
-        completedAt: new Date(),
-        status: 'SUBMITTED',
-      },
-      create: {
-        userId,
-        lessonId,
-        completed: true,
-        completedAt: new Date(),
-        status: 'SUBMITTED',
-      },
-    });
-
-    // If files are uploaded, save them in the File model
-    if (files && files.length > 0) {
-      // Map the files and associate them with the LessonCompletion entry
-      const uploadedFiles = files.map((file) => ({
-        filename: sanitizeFilename(file.originalname),
-        filepath: file.path,
-        mimetype: file.mimetype,
-        size: file.size,
-        lesCompletionId: lessonCompletion.id, // Associate with LessonCompletion
-      }));
-    
-      // Save the files in the File table
-      await prisma.file.createMany({
-        data: uploadedFiles,
-      });
+    if (!userId || !lessonId) {
+      return res
+        .status(400)
+        .json({ error: "userId and lessonId are required." });
     }
 
-    // Calculate progress
-    const progressData = await calculateProgress(userId);
+    try {
+      const lesson = await prisma.lesson.findUnique({
+        where: {id: lessonId},
+        select: {mentorId: true,}
+      })
 
-    // Check if a certificate should be issued
-    const certificate = await checkAndIssueCertificate(userId, progressData);
-    const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
+      if (!lesson || !lesson.mentorId) {
+        return res.status(404).json({ error: "Mentor not found" });
+      }
 
-    // Construct response message
-    const message = certificate
-      ? `Lesson completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate was issued!`
-      : `Lesson completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges.`;
+      const mentorId = lesson.mentorId;
 
-      console.log(lessonCompletion.id)
-    // Return response
-    res.status(200).json({
-      message,
-      files,
-      certificate,
-    });
-  } catch (error) {
-    console.error('Error completing lesson:', error);
-    res.status(500).json({ error: error.message });
-  }
-}); 
-
-router.post('/challenge/:challengeId', challengeSubmissionUpload.array('files', 10), async (req, res) => {
-  const { userId } = req.body;
-  const { challengeId } = req.params;
-  const { files } = req;
-
-  if (!userId || !challengeId) {
-    return res.status(400).json({ error: 'userId and challengeId are required' });
-  }
-
-  try {
-    // Check if the challenge is already completed
-    const existingCompletion = await prisma.challengeCompletion.findUnique({
-      where: {
-        userId_challengeId: {
-          userId,
-          challengeId,
+      // Upsert lessonCompletion and explicitly select the ID
+      const lessonCompletion = await prisma.lessonCompletion.upsert({
+        where: {
+          userId_lessonId: {
+            userId,
+            lessonId,
+          },
         },
-      },
-    });
+        select: {
+          id: true, // Explicitly select the ID
+          lesson: {
+            select: {
+              mentor: true,
+            },
+          },
+        },
+        update: {
+          completed: true,
+          completedAt: new Date(),
+          status: "SUBMITTED",
+        },
+        create: {
+          userId,
+          lessonId,
+          completed: true,
+          completedAt: new Date(),
+          status: "SUBMITTED",
+        },
+      });
 
-    if (existingCompletion && existingCompletion.completed) {
-      await prisma.challengeCompletion.update({
+      // If files are uploaded, save them in the File model
+      if (files && files.length > 0) {
+        // Map the files and associate them with the LessonCompletion entry
+        const uploadedFiles = files.map((file) => ({
+          filename: sanitizeFilename(file.originalname),
+          filepath: file.path,
+          mimetype: file.mimetype,
+          size: file.size,
+          lesCompletionId: lessonCompletion.id, // Associate with LessonCompletion
+        }));
+
+        // Save the files in the File table
+        await prisma.file.createMany({
+          data: uploadedFiles,
+        });
+      }
+
+      // Calculate progress
+      const progressData = await calculateProgress(userId);
+
+      // Check if a certificate should be issued
+      const certificate = await checkAndIssueCertificate(userId, progressData);
+      const {
+        completedLessons,
+        totalLessons,
+        completedChallenges,
+        totalChallenges,
+      } = progressData;
+
+      // Construct response message
+      const message = certificate
+        ? `Lesson completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate was issued!`
+        : `Lesson completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges.`;
+
+        const notifyMentor = async (mentorId) => {
+          const mentorNotification = await prisma.notification.create({
+            data: {
+              userId: mentorId,
+              title: "Student Submission",
+              description: `A student just submitted their Lesson.`,
+              type: "Challenge",
+            },
+          });
+  
+          // Emit notification to mentor if they're online
+          const io = socket.getIO();
+          io.to(mentorId).emit("receiveNotification", {
+            id: mentorNotification.id,
+            title: mentorNotification.title,
+            description: mentorNotification.description,
+            type: mentorNotification.type,
+            createdAt: mentorNotification.createdAt,
+          });
+  
+          console.log(`📢 Notification sent to mentor ${mentorId}`);
+        };
+  
+        await notifyMentor(mentorId);
+      // Return response
+      res.status(200).json({
+        message,
+        files,
+        certificate,
+      });
+    } catch (error) {
+      console.error("Error completing lesson:", error);
+      res.status(500).json({ error: error.message });
+    }
+  }
+);
+
+router.post(
+  "/challenge/:challengeId",
+  challengeSubmissionUpload.array("files", 10),
+  async (req, res) => {
+    const { userId } = req.body;
+    const { challengeId } = req.params;
+    const { files } = req;
+
+    if (!userId || !challengeId) {
+      return res
+        .status(400)
+        .json({ error: "userId and challengeId are required" });
+    }
+
+    try {
+      // 🟢 1. Get mentorId from the Challenge model
+      const challenge = await prisma.challenge.findUnique({
+        where: { id: challengeId },
+        select: { mentorId: true }, // Assuming your Challenge model has mentorId
+      });
+
+      if (!challenge || !challenge.mentorId) {
+        return res.status(404).json({ error: "Mentor not found." });
+      }
+
+      const mentorId = challenge.mentorId;
+
+      // 🟢 2. Check if the challenge is already completed
+      const existingCompletion = await prisma.challengeCompletion.findUnique({
         where: {
           userId_challengeId: {
             userId,
             challengeId,
           },
         },
-        data: {
-          status: 'SUBMITTED', // Updating challengeCompletion.status instead of challenge.status
-        },
       });
-      return res.status(200).json({ message: 'Challenge has been submitted successfully.' });
-    }
 
-    // Mark challenge as completed in challengeCompletion table
-    const challengeCompletion = await prisma.challengeCompletion.upsert({
-      where: {
-        userId_challengeId: {
+      if (existingCompletion && existingCompletion.completed) {
+        await prisma.challengeCompletion.update({
+          where: {
+            userId_challengeId: {
+              userId,
+              challengeId,
+            },
+          },
+          data: {
+            status: "SUBMITTED",
+          },
+        });
+
+        await notifyMentor(mentorId); // 🔑 Notify the mentor based on mentorId
+
+        return res
+          .status(200)
+          .json({ message: "Challenge has been submitted successfully." });
+      }
+
+      // 🟢 3. Upsert challenge completion
+      const challengeCompletion = await prisma.challengeCompletion.upsert({
+        where: {
+          userId_challengeId: {
+            userId,
+            challengeId,
+          },
+        },
+        update: {
+          completed: true,
+          completedAt: new Date(),
+          status: "SUBMITTED",
+        },
+        create: {
           userId,
           challengeId,
+          completed: true,
+          completedAt: new Date(),
+          status: "SUBMITTED",
         },
-      },
-      update: {
-        completed: true,
-        completedAt: new Date(),
-        status: 'SUBMITTED', // Updating status in challengeCompletion
-      },
-      create: {
-        userId,
-        challengeId,
-        completed: true,
-        completedAt: new Date(),
-        status: 'SUBMITTED', // Setting status in new entry
-      },
-    });
-
-    // If files are uploaded, save them in the File model
-    if (files && files.length > 0) {
-      const uploadedFiles = files.map((file) => ({
-        filename: sanitizeFilename(file.originalname),
-        filepath: file.path,
-        mimetype: file.mimetype,
-        size: file.size,
-        chCompletionId: challengeCompletion.id,
-      }));
-
-      await prisma.file.createMany({
-        data: uploadedFiles,
       });
+
+      // 🟢 4. Upload files if provided
+      if (files && files.length > 0) {
+        const uploadedFiles = files.map((file) => ({
+          filename: sanitizeFilename(file.originalname),
+          filepath: file.path,
+          mimetype: file.mimetype,
+          size: file.size,
+          chCompletionId: challengeCompletion.id,
+        }));
+
+        await prisma.file.createMany({
+          data: uploadedFiles,
+        });
+      }
+
+      // 🟢 5. Calculate progress and issue certificate
+      const progressData = await calculateProgress(userId);
+      const certificate = await checkAndIssueCertificate(userId, progressData);
+      const {
+        completedLessons,
+        totalLessons,
+        completedChallenges,
+        totalChallenges,
+      } = progressData;
+
+      const message = certificate
+        ? `Challenge completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate was issued!`
+        : `Challenge completed successfully. You finished ${completedChallenges} out of ${totalChallenges} challenges.`;
+
+      // 🟢 6. Notify mentor based on challenge.mentorId
+      const notifyMentor = async (mentorId) => {
+        const mentorNotification = await prisma.notification.create({
+          data: {
+            userId: mentorId,
+            title: "Student Submission",
+            description: `A student just submitted their challenge.`,
+            type: "Challenge",
+          },
+        });
+
+        // Emit notification to mentor if they're online
+        const io = socket.getIO();
+        io.to(mentorId).emit("receiveNotification", {
+          id: mentorNotification.id,
+          title: mentorNotification.title,
+          description: mentorNotification.description,
+          type: mentorNotification.type,
+          createdAt: mentorNotification.createdAt,
+        });
+
+        console.log(`📢 Notification sent to mentor ${mentorId}`);
+      };
+
+      await notifyMentor(mentorId);
+
+      res.status(200).json({
+        message,
+        files,
+        certificate,
+      });
+    } catch (error) {
+      console.error("❌ Error completing challenge:", error);
+      res.status(500).json({ error: error.message });
     }
-
-    // Calculate progress
-    const progressData = await calculateProgress(userId);
-    const certificate = await checkAndIssueCertificate(userId, progressData);
-    const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
-
-    const message = certificate
-      ? `Challenge completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate was issued!`
-      : `Challenge completed successfully. You finished ${completedChallenges} out of ${totalChallenges} challenges.`;
-
-    res.status(200).json({
-      message,
-      files,
-      certificate,
-    });
-  } catch (error) {
-    console.error('Error completing challenge:', error);
-    res.status(500).json({ error: error.message });
   }
-});
+);
 
-router.get('/lesson/:lessonId/:userId/status', async (req, res) => {
+router.get("/lesson/:lessonId/:userId/status", async (req, res) => {
   const { lessonId, userId } = req.params;
 
   if (!lessonId || !userId) {
-    return res.status(400).json({ error: 'lessonId and userId are required' });
+    return res.status(400).json({ error: "lessonId and userId are required" });
   }
 
   try {
@@ -263,32 +385,32 @@ router.get('/lesson/:lessonId/:userId/status', async (req, res) => {
     });
 
     if (!lessonCompletion) {
-      return res.status(404).json({ error: 'Lesson completion not found' });
+      return res.status(404).json({ error: "Lesson completion not found" });
     }
 
     res.status(200).json(lessonCompletion);
   } catch (error) {
-    console.error('Error fetching lesson status:', error);
+    console.error("Error fetching lesson status:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
-router.get('/challenge/:challengeId/:userId/status', async (req, res) => {
+router.get("/challenge/:challengeId/:userId/status", async (req, res) => {
   const { challengeId, userId } = req.params;
 
   if (!challengeId) {
-    return res.status(400).json({ error: 'challengeId is required' });
+    return res.status(400).json({ error: "challengeId is required" });
   }
 
   try {
     const challenge = await prisma.challengeCompletion.findUnique({
-      where: { 
+      where: {
         userId_challengeId: {
           userId,
           challengeId,
-        }
+        },
       },
-      select: { 
+      select: {
         status: true,
         submissionFiles: true,
         notes: true,
@@ -296,32 +418,32 @@ router.get('/challenge/:challengeId/:userId/status', async (req, res) => {
     });
 
     if (!challenge) {
-      return res.status(404).json({ error: 'challenge not found' });
+      return res.status(404).json({ error: "challenge not found" });
     }
 
     res.status(200).json(challenge);
   } catch (error) {
-    console.error('Error fetching challenge status:', error);
+    console.error("Error fetching challenge status:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
-router.get('/presentation/:presentationId/:userId/status', async (req, res) => {
+router.get("/presentation/:presentationId/:userId/status", async (req, res) => {
   const { presentationId, userId } = req.params;
 
   if (!presentationId) {
-    return res.status(400).json({ error: 'presentationId is required' });
+    return res.status(400).json({ error: "presentationId is required" });
   }
 
   try {
     const presentation = await prisma.finalCompletion.findUnique({
-      where: { 
+      where: {
         userId_presentationId: {
           userId,
           presentationId,
-        }
+        },
       },
-      select: { 
+      select: {
         status: true,
         submissionFiles: true,
         notes: true,
@@ -329,22 +451,22 @@ router.get('/presentation/:presentationId/:userId/status', async (req, res) => {
     });
 
     if (!presentation) {
-      return res.status(404).json({ error: 'presentation not found' });
+      return res.status(404).json({ error: "presentation not found" });
     }
 
     res.status(200).json(presentation);
   } catch (error) {
-    console.error('Error fetching presentation status:', error);
+    console.error("Error fetching presentation status:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
 // Get completion percentages for lessons and challenges
-router.get('/percentage/:userId/:classId', async (req, res) => {
+router.get("/percentage/:userId/:classId", async (req, res) => {
   const { userId, classId } = req.params;
 
   if (!userId || !classId) {
-    return res.status(400).json({ error: 'userId and classId are required' });
+    return res.status(400).json({ error: "userId and classId are required" });
   }
 
   try {
@@ -358,7 +480,7 @@ router.get('/percentage/:userId/:classId', async (req, res) => {
     });
 
     if (!userInClass) {
-      return res.status(403).json({ message: 'You are not from this class' });
+      return res.status(403).json({ message: "You are not from this class" });
     }
 
     // Fetch total and completed lessons
@@ -372,18 +494,24 @@ router.get('/percentage/:userId/:classId', async (req, res) => {
         },
       },
     });
-    const lessonPercentage = totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
+    const lessonPercentage =
+      totalLessons > 0 ? (completedLessons / totalLessons) * 100 : 0;
 
     // Fetch total and completed challenges
-    const totalChallenges = await prisma.challenge.count({ where: { classId } });
+    const totalChallenges = await prisma.challenge.count({
+      where: { classId },
+    });
     const completedChallenges = await prisma.challengeCompletion.count({
       where: { userId, classId, completed: true },
     });
-    const challengePercentage = totalChallenges > 0 ? (completedChallenges / totalChallenges) * 100 : 0;
+    const challengePercentage =
+      totalChallenges > 0 ? (completedChallenges / totalChallenges) * 100 : 0;
 
     // If lessons or challenges are incomplete, return a message
     if (lessonPercentage < 100 || challengePercentage < 100) {
-      return res.status(200).json({ message: "You haven't finished this class yet" });
+      return res
+        .status(200)
+        .json({ message: "You haven't finished this class yet" });
     }
 
     // Check if the certificate exists
@@ -392,7 +520,9 @@ router.get('/percentage/:userId/:classId', async (req, res) => {
     });
 
     if (!certificate) {
-      return res.status(200).json({ message: "You haven't received a certificate yet" });
+      return res
+        .status(200)
+        .json({ message: "You haven't received a certificate yet" });
     }
 
     // Return the certificate's filepath if all conditions are met
@@ -414,12 +544,22 @@ async function calculateProgress(userId) {
     where: { userId, completed: true },
   });
 
-  return { completedLessons, totalLessons, completedChallenges, totalChallenges };
+  return {
+    completedLessons,
+    totalLessons,
+    completedChallenges,
+    totalChallenges,
+  };
 }
 
 // Helper function to check and issue certificate
 async function checkAndIssueCertificate(userId, progressData) {
-  const { completedLessons, totalLessons, completedChallenges, totalChallenges } = progressData;
+  const {
+    completedLessons,
+    totalLessons,
+    completedChallenges,
+    totalChallenges,
+  } = progressData;
 
   const lessonProgress = (completedLessons / totalLessons) * 100;
   const challengeProgress = (completedChallenges / totalChallenges) * 100;
@@ -430,8 +570,8 @@ async function checkAndIssueCertificate(userId, progressData) {
     }).id;
     const userId = await prisma.user.findMany({
       where: { lessons: { some: {} } }, // Fetch the related userId dynamically
-    }).id
-    console.log('Class ID:', classId, userId);
+    }).id;
+    console.log("Class ID:", classId, userId);
     // return await issueCertificate(userId, classId);
   }
 
@@ -454,74 +594,115 @@ const presentationSubmissionUpload = multer({
   storage: presentationSubmissionStorage,
   limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
   fileFilter: (req, file, cb) => {
-    const allowedMimeTypes = ["application/pdf", "image/jpeg", "image/png", "application/zip", "video/mp4"];
+    const allowedMimeTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "application/zip",
+      "video/mp4",
+    ];
     if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Invalid file type. Only JPEG, PNG, PDF, PPTX, and MP4 are allowed."));
+      cb(
+        new Error(
+          "Invalid file type. Only JPEG, PNG, PDF, PPTX, and MP4 are allowed."
+        )
+      );
     }
   },
 });
 
-router.post('/presentation/:presentationId', presentationSubmissionUpload.array('files', 10), async (req, res) => {
-  const { userId } = req.body;
-  const { presentationId } = req.params;
-  const { files } = req;
+router.post(
+  "/presentation/:presentationId",
+  presentationSubmissionUpload.array("files", 10),
+  async (req, res) => {
+    const { userId } = req.body;
+    const { presentationId } = req.params;
+    const { files } = req;
 
-  if (!userId || !presentationId) {
-    return res.status(400).json({ error: 'userId and id are required.' });
-  }
-
-  try {
-    // Upsert lessonCompletion and explicitly select the ID
-    const finalCompletion = await prisma.finalCompletion.upsert({
-      where: {
-        userId_presentationId: {
-          userId,
-          presentationId,
-        },
-      },
-      select: {
-        id: true, // Explicitly select the ID
-      },
-      update: {
-        completed: true,
-        completedAt: new Date(),
-        status: 'SUBMITTED',
-      },
-      create: {
-        userId,
-        presentationId,
-        completed: true,
-        completedAt: new Date(),
-        status: 'SUBMITTED',
-      },
-    });
-
-    // If files are uploaded, save them in the File model
-    if (files && files.length > 0) {
-      // Map the files and associate them with the LessonCompletion entry
-      const uploadedFiles = files.map((file) => ({
-        filename: sanitizeFilename(file.originalname),
-        filepath: file.path,
-        mimetype: file.mimetype,
-        size: file.size,
-        fpCompletionId: finalCompletion.id, // Associate with LessonCompletion
-      }));
-    
-      // Save the files in the File table
-      await prisma.file.createMany({
-        data: uploadedFiles,
-      });
+    if (!userId || !presentationId) {
+      return res.status(400).json({ error: "userId and presentationId are required." });
     }
 
-    res.status(200).json({
-      files,
-    });
-  } catch (error) {
-    console.error('Error completing presentation:', error);
-    res.status(500).json({ error: error.message });
+    try {
+      // Find all examiners
+      const examiners = await prisma.user.findMany({
+        where: { role: "EXAMINER" },
+        select: { id: true },
+      });
+
+      if (!examiners.length) {
+        return res.status(404).json({ error: "No examiners found." });
+      }
+
+      // Upsert finalCompletion
+      const finalCompletion = await prisma.finalCompletion.upsert({
+        where: {
+          userId_presentationId: {
+            userId,
+            presentationId,
+          },
+        },
+        select: { id: true },
+        update: {
+          completed: true,
+          completedAt: new Date(),
+          status: "SUBMITTED",
+        },
+        create: {
+          userId,
+          presentationId,
+          completed: true,
+          completedAt: new Date(),
+          status: "SUBMITTED",
+        },
+      });
+
+      // Handle file uploads
+      if (files && files.length > 0) {
+        const uploadedFiles = files.map((file) => ({
+          filename: sanitizeFilename(file.originalname),
+          filepath: file.path,
+          mimetype: file.mimetype,
+          size: file.size,
+          fpCompletionId: finalCompletion.id,
+        }));
+
+        await prisma.file.createMany({ data: uploadedFiles });
+      }
+
+      // Notify each examiner
+      for (const examiner of examiners) {
+        const mentorNotification = await prisma.notification.create({
+          data: {
+            userId: examiner.id,
+            title: "Student Submission",
+            description: "A student just submitted their final presentation.",
+            type: "Presentation",
+          },
+        });
+
+        // Emit socket notification
+        const io = socket.getIO();
+        io.to(examiner.id).emit("receiveNotification", {
+          id: mentorNotification.id,
+          title: mentorNotification.title,
+          description: mentorNotification.description,
+          type: mentorNotification.type,
+          createdAt: mentorNotification.createdAt,
+        });
+
+        console.log(`📢 Notification sent to examiner ${examiner.id}`);
+      }
+
+      res.status(200).json({ files });
+    } catch (error) {
+      console.error("Error completing presentation:", error);
+      res.status(500).json({ error: error.message });
+    }
   }
-}); 
+);
+  
 
 module.exports = router;

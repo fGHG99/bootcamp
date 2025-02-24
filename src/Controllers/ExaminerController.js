@@ -5,52 +5,6 @@ const { protect } = require("../Middlewares/Auth");
 const prisma = new PrismaClient();
 const router = express.Router();
 
-router.get("/final-presentations", async (req, res) => {
-  try {
-    const { batchId, classId } = req.query;
-
-    const whereClause = {};
-    if (batchId) whereClause.batchId = batchId;
-    if (classId) whereClause.classId = classId;
-
-    const finalPresentations = await prisma.finalPresentation.findMany({
-      where: whereClause, 
-      include: {
-        batch: {
-          select: {
-            id: true,
-            batchTitle: true,
-          },
-        },
-        class: {
-          select: {
-            id: true,
-            className: true,
-          },
-        },
-        mentor: {
-          select: {
-            id: true,
-            fullName: true,
-          },
-        },
-        files: {
-          select: {
-            id: true,
-            filename: true,
-            filepath: true,
-          },
-        },
-      },
-    });
-
-    res.status(200).json(finalPresentations);
-  } catch (error) {
-    console.error("Error fetching final presentations:", error);
-    res.status(500).json({ error: "Failed to fetch final presentations" });
-  }
-});
-
 router.get("/presentations/completions", async (req, res) => {
   try {
     const { batchId, classId } = req.query;
@@ -106,6 +60,144 @@ router.get("/presentations/completions", async (req, res) => {
   } catch (error) {
     console.error("Error fetching final presentations:", error);
     res.status(500).json({ error: "Failed to fetch final presentations" });
+  }
+});
+
+router.get('/presentation/:presentationId/completions', async (req, res) => {
+  const { presentationId } = req.params;
+
+  if (!presentationId) {
+    return res.status(400).json({ error: 'Lesson ID is required' });
+  }
+
+  try {
+    // Find all lesson completions related to the presentationId
+    const finalCompletions = await prisma.finalCompletion.findMany({
+      where: { presentationId: presentationId },
+      select: { userId: true } // Only fetch user IDs
+    });
+
+    if (!finalCompletions.length) {
+      return res.status(404).json({ message: 'No presentation competion find' });
+    }
+
+    // Fetch lesson completions grouped by status
+    const submittedCompletions = await prisma.finalCompletion.findMany({
+      where: {
+        presentationId,
+        status: 'SUBMITTED'
+      },
+      include: { 
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            nickname: true,
+          }
+        }, 
+        final: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            deadline: true,
+          }
+        },
+        submissionFiles: true,
+      }
+    });
+
+    const notSubmittedCompletions = await prisma.finalCompletion.findMany({
+      where: {
+        presentationId,
+        status: 'NOTSUBMITTED'
+      },
+      include: { 
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            nickname: true,
+          }
+        }, 
+        final: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            deadline: true,
+          }
+        }, 
+        submissionFiles: true,
+      }
+    });
+
+    const lateCompletions = await prisma.finalCompletion.findMany({
+      where: {
+        presentationId,
+        status: 'LATE'
+      },
+      include: { 
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            nickname: true,
+          }
+        }, 
+        final: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            deadline: true,
+          }
+        }, 
+        submissionFiles: true
+      }
+    });
+
+    const gradedCompletions = await prisma.finalCompletion.findMany({
+      where: {
+        presentationId,
+        status: 'GRADED'
+      },
+      include: { 
+        user: {
+          select: {
+            id: true,
+            fullName: true,
+            nickname: true,
+          }
+        }, 
+        final: {
+          select: {
+            id: true,
+            title: true,
+            description: true,
+            deadline: true,
+            
+          }
+        }, 
+        submissionFiles: true
+      }
+    });
+
+    // Combine all completions into an array
+    const allCompletions = [
+      ...submittedCompletions.map(completion => ({ ...completion, status: 'SUBMITTED' })),
+      ...notSubmittedCompletions.map(completion => ({ ...completion, status: 'NOTSUBMITTED' })),
+      ...lateCompletions.map(completion => ({ ...completion, status: 'LATE' })),
+      ...gradedCompletions.map(completion => ({ ...completion, status: 'GRADED'}))
+    ];
+
+    res.status(200).json({
+      message: 'Final completions fetched successfully',
+      completions: allCompletions
+    });
+  } catch (error) {
+    console.error('Error fetching lesson completions:', error);
+    res.status(500).json({ error: 'Failed to fetch lesson completions', details: error.message });
   }
 });
 

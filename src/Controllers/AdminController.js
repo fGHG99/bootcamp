@@ -758,43 +758,45 @@ router.get('/class/:batchId/batch', async (req, res) => {
 
 router.get('/class/:id/class', async (req, res) => {
   const { id } = req.params;
+  const { order = 'asc' } = req.query; // Only control the order direction
 
   try {
+    // Validate order direction
+    const sortOrder = order === 'desc' ? 'desc' : 'asc';
+
     // Fetch the class data based on classId
     const classData = await prismaClient.class.findUnique({
-      where: { id: id },
+      where: { id },
       include: {
         users: {
           select: {
-            profiles: {select: {filepath: true}},
+            profiles: { select: { filepath: true } },
             fullName: true,
             email: true,
             role: true,
-          }
-        }, // Include related users
+          },
+        },
         mentors: {
           select: {
             fullName: true,
             email: true,
             role: true,
-          }
-        }, // Include related mentors
-        batches: true, 
-         challenges: {
-          include: {
-            files: true,
-         }},
-         lessons: {
-          include: {
-            files: true,
-          }
-         },
-         presentation: {
-          include: {
-            files: true,
-          }
-         },
-        certificates: true, // Include related certificates
+          },
+        },
+        batches: true,
+        challenges: {
+          orderBy: { createdAt: sortOrder },
+          include: { files: true },
+        },
+        lessons: {
+          orderBy: { createdAt: sortOrder },
+          include: { files: true },
+        },
+        presentation: {
+          orderBy: { createdAt: sortOrder },
+          include: { files: true },
+        },
+        certificates: true,
         cover: true,
       },
     });
@@ -808,10 +810,8 @@ router.get('/class/:id/class', async (req, res) => {
 
     // Update the class with the participant count
     await prismaClient.class.update({
-      where: { id: id },
-      data: {
-        participant: participantCount,
-      },
+      where: { id },
+      data: { participant: participantCount },
     });
 
     // Return the class data along with the updated participant count
@@ -825,6 +825,7 @@ router.get('/class/:id/class', async (req, res) => {
     return res.status(500).json({ message: 'An error occurred while fetching the class data.' });
   }
 });
+
 
 //router to get batch based on mentor
 router.get('/batch/:mentorId', async (req, res) => {

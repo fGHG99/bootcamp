@@ -162,10 +162,6 @@ router.get('/notes/:graderId/:visibility?', protect,  async (req, res) => {
         nickname: note.trainee.nickname || 'No Nickname',
         email: note.trainee.email || 'No Email',
       },
-      class: {
-        id: note.class.id,
-        className: note.class.className || 'Unknown class',
-      }
     }));
 
     res.json(transformedNotes);

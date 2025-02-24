@@ -21,14 +21,34 @@ router.post("/login", async (req, res) => {
   if (!email || !password || !role) {
     return res
       .status(400)
-      .json({ message: "Email, password, and role are required" });
+      .json({ message: "Email, password ARE required" });
   }
 
   try {
+    // Find user by email
     const user = await prismaClient.user.findUnique({
       where: { email },
     });
 
+    // If no user is found with the given email
+    if (!user) {
+      return res.status(404).json({ message: "No email found" });
+    }
+
+    // Check if the role matches
+    if (user.role !== role) {
+      return res.status(403).json({ message: "Access denied" });
+    }
+
+    // Validate the password
+    const isPasswordValid = await bcrypt.compare(password, user.password);
+    if (!isPasswordValid) {
+      return res
+        .status(401)
+        .json({ message: "Username or password is incorrect" });
+    }
+
+    // Generate tokens
     const accessToken = jwt.sign({ id: user.id, role: user.role }, SECRET_KEY, {
       expiresIn: "30m",
     });
@@ -38,21 +58,7 @@ router.post("/login", async (req, res) => {
       { expiresIn: "1y" }
     );
 
-    if (!user) {
-      return res.status(404).json({ message: "User not found" });
-    }
-
-    if (user.role !== role) {
-      return res.status(403).json({ message: "Access denied" });
-    }
-
-    const isPasswordValid = await bcrypt.compare(password, user.password);
-    if (!isPasswordValid) {
-      return res
-        .status(401)
-        .json({ message: "Username or password is incorrect" });
-    }
-
+    // Update user's login state and store refresh token
     await prismaClient.user.update({
       where: { id: user.id },
       data: {
@@ -61,6 +67,7 @@ router.post("/login", async (req, res) => {
       },
     });
 
+    // Return success response
     return res.status(200).json({
       message: "Login successful",
       accessToken,
@@ -261,8 +268,6 @@ router.put("/edit/:id", async (req, res) => {
           type: "Profile",
         },
       });
-
-      console.log("User Notification Created", userNotification);
 
       // Emit notification to the user
       const io = socket.getIO();
@@ -815,6 +820,7 @@ router.get("/class/user/:userId", async (req, res) => {
           },
         },
       },
+      orderBy: { createdAt: 'asc' }, // You can change 'asc' to 'desc' if needed,
       select: {
         id: true,
         className: true,
