@@ -1,153 +1,138 @@
 const { PrismaClient } = require('@prisma/client');
+const bcrypt = require('bcrypt');
+
 const prisma = new PrismaClient();
-const jwt = require('jsonwebtoken');
-const bcrypt = require('bcryptjs');
-
-const REFRESH_KEY = process.env.REFRESH_SECRET;
-const STATUS = "Ongoing";
-
-async function generateRefreshToken(user) {
-  return jwt.sign({ id: user.id, role: user.role }, REFRESH_KEY, { expiresIn: '1y' });
-}
-
-async function hashPassword(password) {
-  const salt = await bcrypt.genSalt(10);
-  return bcrypt.hash(password, salt);
-}
 
 async function main() {
-  console.log("Deleting existing data...");
+  // Predefined roles and CUIDs
+  const roles = [
+    { id: 'cm7hs12760000nveoy1p444sy', name: 'ADMIN' },
+    { id: 'cm7hs1a7w0001nveotwcbl3c4', name: 'TRAINEE' },
+    { id: 'cm7hs1eus0002nveoxivbgzom', name: 'EXAMINER' },
+    { id: 'cm7hs1lho0003nveoyk9d0lc7', name: 'MENTOR' },
+  ];
 
-  // Deleting existing data
-  await prisma.$transaction([
-    prisma.challenge.deleteMany({}),
-    prisma.class.deleteMany({}),
-    prisma.batch.deleteMany({}),
-    prisma.token.deleteMany({}),
-    prisma.profile.deleteMany({}),
-    prisma.user.deleteMany({})
-  ]);
+  // Seed roles
+  console.log('Seeding roles...');
+  for (const role of roles) {
+    await prisma.roles.upsert({
+      where: { id: role.id },
+      update: {},
+      create: { id: role.id, name: role.name },
+    });
+  }
 
-  console.log("Existing data deleted.");
+  // User accounts for each role
+  const users = [
+    {
+      fullName: 'Admin User',
+      email: 'admin@example.com',
+      password: 'admin123',
+      role: 'ADMIN',
+    },
+    {
+      fullName: 'Trainee User',
+      email: 'trainee@example.com',
+      password: 'trainee123',
+      role: 'TRAINEE',
+    },
+    {
+      fullName: 'Examiner User',
+      email: 'examiner@example.com',
+      password: 'examiner123',
+      role: 'EXAMINER',
+    },
+    {
+      fullName: 'Mentor User',
+      email: 'mentor@example.com',
+      password: 'mentor123',
+      role: 'MENTOR',
+    },
+  ];
 
-  // Hash passwords
-  const mentorPassword = await hashPassword("mentorpassword");
-  const participant1Password = await hashPassword("part1password");
-  const participant2Password = await hashPassword("part2password");
-
-  // Create mentor data
-  const mentor = {
-    email: "mentor@example.com",
-    fullName: "John Doe",
-    password: mentorPassword,
-    role: "MENTOR",
-    userstatus: "UNVERIFIED",
-  };
-  mentor.refreshToken = await generateRefreshToken(mentor);
-
-  // Create participant data
-  const participant1 = {
-    email: "student1@example.com",
-    fullName: "Alice",
-    password: participant1Password,
-    role: "TRAINEE",
-    userstatus: "UNVERIFIED",
-  };
-  participant1.refreshToken = await generateRefreshToken(participant1);
-
-  const participant2 = {
-    email: "student2@example.com",
-    fullName: "Bob",
-    password: participant2Password,
-    role: "TRAINEE",
-    userstatus: "UNVERIFIED",
-  };
-  participant2.refreshToken = await generateRefreshToken(participant2);
-
-  // Seed batch
-  const batch = await prisma.batch.create({
-    data: {
-      batchNum: 14,
-      batchClass: "Full Stack Development",
-      batchTitle: "Batch 14 - Full Stack Development",
-      batchDesc: "Full stack development course for beginners",
-      startDate: new Date("2024-01-01T00:00:00.000Z"),
-      endDate: new Date("2024-06-01T00:00:00.000Z"),
-      status: STATUS,
-      mentor: {
-        create: mentor,
+  // Seed users with userstatus set to UNVERIFIED
+  console.log('Seeding users...');
+  for (const user of users) {
+    const hashedPassword = await bcrypt.hash(user.password, 10);
+    await prisma.user.upsert({
+      where: { email: user.email },
+      update: {},
+      create: {
+        fullName: user.fullName,
+        email: user.email,
+        password: hashedPassword,
+        role: user.role,
+        userstatus: 'UNVERIFIED', // Set userstatus to UNVERIFIED
       },
-      classes: {
-        create: [
-          {
-            className: "Full stack development",
-            createdAt: new Date("2024-01-15T00:00:00.000Z"),
-            participant: 20,
-          },
-          {
-            className: "Quality Assurance",
-            createdAt: new Date("2024-02-01T00:00:00.000Z"),
-            participant: 18,
-          },
-        ],
-      },
+    });
+  }
+
+  // Route permissions grouped by role
+  const routePermissions = [
+    {
+      roleId: 'cm7hs1a7w0001nveotwcbl3c4', // TRAINEE
+      routes: [
+        '/trainee/dashboard',
+        '/trainee/profile',
+        '/trainee/notification',
+        '/trainee/challenge',
+        '/trainee/lesson',
+        '/trainee/presentation/:id',
+        '/trainee/challenge/:id',
+        '/trainee/lesson/:id',
+        '/trainee/class/:classId',
+      ],
+    },
+    {
+      roleId: 'cm7hs1eus0002nveoxivbgzom', // EXAMINER
+      routes: [
+        '/examiner/dashboard',
+        '/examiner/class/:batchId',
+        '/examiner/c/:classId/:batchId',
+        '/examiner/c/:classId/s/:id',
+      ],
+    },
+    {
+      roleId: 'cm7hs1lho0003nveoyk9d0lc7', // MENTOR
+      routes: [
+        '/dashboard/c/:classId/:batchId',
+        '/dashboard/class/:batchId',
+        '/dashboard/c/:classId/s/:id',
+        '/dashboard/note',
+        '/dashboard/trainee',
+        '/dashboard/batch',
+        '/dashboard',
+      ],
+    },
+    {
+      roleId: 'cm7hs12760000nveoy1p444sy', // ADMIN
+      routes: ['/admin/dashboard'],
+    },
+  ];
+
+  // Seed route permissions
+  console.log('Seeding route permissions...');
+  for (const group of routePermissions) {
+    for (const route of group.routes) {
+      await prisma.routePermissions.upsert({
+        where: { route },
+        update: {},
+        create: {
+          route,
+          role: { connect: { id: group.roleId } },
+        },
+      });
     }
-  });
+  }
 
-  console.log("Batch created:", batch);
-
-  // Create classes and assign participants to classes
-  const class1 = await prisma.class.create({
-    data: {
-      className: "Full stack development",
-      createdAt: new Date("2024-01-15T00:00:00.000Z"),
-      participant: 20, // Assuming this is the number of participants
-      batchId: batch.id, // Linking to the existing batch
-      users: {  // Use 'users' if it's the correct relation field
-        create: [
-          {
-            email: "student1@example.com",
-            fullName: "Alice",
-            password: participant1Password,
-            role: "TRAINEE",
-            userstatus: "UNVERIFIED",
-            refreshToken: participant1.refreshToken,
-          },
-        ],
-      },
-    },
-  });
-  
-  const class2 = await prisma.class.create({
-    data: {
-      className: "Quality Assurance",
-      createdAt: new Date("2024-02-01T00:00:00.000Z"),
-      participant: 18, // Assuming this is the number of participants
-      batchId: batch.id, // Linking to the existing batch
-      users: {  // Use 'users' if it's the correct relation field
-        create: [
-          {
-            email: "student2@example.com",
-            fullName: "Bob",
-            password: participant2Password,
-            role: "TRAINEE",
-            userstatus: "UNVERIFIED",
-            refreshToken: participant2.refreshToken,
-          },
-        ],
-      },
-    },
-  });
-
-  console.log("Class 1 and Class 2 with Participants created:", class1, class2);
+  console.log('Seeding completed successfully!');
 }
 
 main()
-  .then(async () => {
-    await prisma.$disconnect();
-  })
-  .catch(async (e) => {
-    console.error(e);
-    await prisma.$disconnect();
+  .catch((e) => {
+    console.error('Error during seeding:', e);
     process.exit(1);
+  })
+  .finally(async () => {
+    await prisma.$disconnect();
   });
