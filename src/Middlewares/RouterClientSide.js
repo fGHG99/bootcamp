@@ -52,12 +52,22 @@ router.get("/allowed", async (req, res) => {
   }
 
   try {
-    const allowedRoles = await prismaClient.routePermissions.findMany({
+    const routePermission = await prismaClient.routePermissions.findUnique({
       where: { route },
-      select: { role: { select: { name: true } } },
+      select: {
+        role: {
+          select: { name: true }, // Get role names
+        },
+      },
     });
 
-    const roleNames = allowedRoles.map((permission) => permission.role.name);
+    if (!routePermission) {
+      return res.status(404).json({ message: "Route not found" });
+    }
+
+    // Extract role names from the array of role objects
+    const roleNames = routePermission.role.map((r) => r.name);
+    
     res.json({ allowedRoles: roleNames });
   } catch (error) {
     console.error("Failed to fetch allowed roles:", error);
@@ -67,15 +77,34 @@ router.get("/allowed", async (req, res) => {
 
 // 🔹 Create New Route Permission
 router.post("/route-permissions", async (req, res) => {
-  const { route, roleId } = req.body;
+  const { route, roleIds } = req.body;
 
-  if (!route || !roleId) {
-    return res.status(400).json({ message: "Route and roleId are required" });
+  if (!route || !roleIds || !Array.isArray(roleIds)) {
+    return res.status(400).json({ message: "Route and roleIds (array) are required" });
   }
 
   try {
+    // Validate if all roleIds exist
+    const existingRoles = await prismaClient.roles.findMany({
+      where: { id: { in: roleIds } },
+      select: { id: true },
+    });
+
+    const existingRoleIds = existingRoles.map((role) => role.id);
+    
+    if (existingRoleIds.length !== roleIds.length) {
+      return res.status(400).json({ message: "One or more roleIds do not exist" });
+    }
+
+    // Proceed with creating the Route Permission
     const newPermission = await prismaClient.routePermissions.create({
-      data: { route, roleId },
+      data: {
+        route,
+        role: {
+          connect: existingRoleIds.map((id) => ({ id })),
+        },
+      },
+      include: { role: true },
     });
 
     res.status(201).json(newPermission);
@@ -85,24 +114,77 @@ router.post("/route-permissions", async (req, res) => {
   }
 });
 
-// 🔹 Update Existing Route Permission
+// Update Route Permission (Toggle Role Assignment)
 router.put("/route-permissions/:id", async (req, res) => {
-  const { id } = req.params;
-  const { route, roleId } = req.body;
-
-  if (!route || !roleId) {
-    return res.status(400).json({ message: "Route and roleId are required" });
-  }
+  const { addRoleIds, removeRoleIds } = req.body;
+  const routeId = req.params.id;
 
   try {
-    const updatedPermission = await prismaClient.routePermissions.update({
+    // Add new roles
+    if (addRoleIds.length > 0) {
+      await prismaClient.routePermissions.update({
+        where: { id: routeId },
+        data: {
+          role: {
+            connect: addRoleIds.map(id => ({ id })),
+          },
+        },
+      });
+    }
+
+    // Remove roles
+    if (removeRoleIds.length > 0) {
+      await prismaClient.routePermissions.update({
+        where: { id: routeId },
+        data: {
+          role: {
+            disconnect: removeRoleIds.map(id => ({ id })),
+          },
+        },
+      });
+    }
+
+    res.json({ message: "Permissions updated successfully" });
+  } catch (error) {
+    console.error("Error updating permissions:", error);
+    res.status(500).json({ error: "Failed to update permissions" });
+  }
+});
+
+
+router.get("/route-permissions", async (req, res) => {
+  try {
+    const permissions = await prismaClient.routePermissions.findMany(
+      { include: { role: true}}
+    );
+    res.status(200).json(permissions);
+  } catch (error) {
+    console.error("Failed to fetch route permissions:", error);
+    res.status(500).json({ message: "Internal server error" });
+  }
+});
+
+// 🔹 Get Route Permission by ID
+router.get("/route-permissions/:id", async (req, res) => {
+  const { id } = req.params;
+
+  try {
+    const permission = await prismaClient.routePermissions.findUnique({
       where: { id },
-      data: { route, roleId },
+      include: {
+        role: {
+          select: { id: true, name: true }, // Get role names
+      }
+    }
     });
 
-    res.json(updatedPermission);
+    if (!permission) {
+      return res.status(404).json({ message: "Route permission not found" });
+    }
+
+    res.status(200).json(permission);
   } catch (error) {
-    console.error("Failed to update route permission:", error);
+    console.error("Failed to fetch route permission:", error);
     res.status(500).json({ message: "Internal server error" });
   }
 });

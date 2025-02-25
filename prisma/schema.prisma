@@ -102,8 +102,7 @@ model Roles {
 model RoutePermissions {
   id     String @id @default(cuid())
   route  String @unique
-  roleId String
-  role   Roles  @relation(fields: [roleId], references: [id], onDelete: Cascade)
+  role   Roles[]
 }
 
 model Token {

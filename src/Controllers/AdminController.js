@@ -926,23 +926,16 @@ router.put('/batch/:id', async (req, res) => {
 
 router.get('/role/roles', async (req, res) => {
   try {
-      // Fetch enum roles
-      // const enumRoles = Object.values(RoleEnum);
-
-      // Fetch roles from the database table
       const tableRoles = await prismaClient.roles.findMany({
-          select: { name: true }
+          select: { 
+            id: true,
+            name: true, 
+            permissions: true,
+            
+         }
       });
 
-      // If the table has roles, map them, otherwise return an empty array
-      const tableRoleNames = tableRoles.length > 0 
-          ? tableRoles.map(role => role.name) 
-          : [];
-
-      // Merge enum roles and table roles, removing duplicates using Set
-      // const mergedRoles = [...new Set([...enumRoles, ...tableRoleNames])];
-
-      res.status(200).json({ roles: tableRoleNames });
+      res.status(200).json({ tableRoles });
   } catch (error) {
       console.error('Error fetching roles:', error);
       res.status(500).json({ error: "Failed to fetch roles" });
