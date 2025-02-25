@@ -73,7 +73,7 @@ model User {
   Token            Token[]
   refreshToken     String?
   role             Role
-  userstatus       UserStatus
+  userstatus       UserStatus @default(UNVERIFIED)
   isLoggedIn       Boolean  @default(false)
   batches          Batch[]  @relation("BatchParticipants")
   mentors          Batch[]  @relation("BatchMentors")
