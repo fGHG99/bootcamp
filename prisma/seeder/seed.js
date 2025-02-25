@@ -94,6 +94,8 @@ async function main() {
         '/examiner/class/:batchId',
         '/examiner/c/:classId/:batchId',
         '/examiner/c/:classId/s/:id',
+        '/examiner/presentation',
+        '/examiner/profile'
       ],
     },
     {
