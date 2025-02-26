@@ -19,6 +19,10 @@ const sanitizeFilename = (filename) => {
   return filename.replace(/\s+/g, "_").replace(/[^a-zA-Z0-9_.-]/g, "");
 };
 
+const allowedMimeTypes = {
+  profile: ["image/jpeg", "image/png", "application/pdf"],
+};
+
 // Configure multer storage for profile uploads
 const profileStorage = multer.diskStorage({
   destination: (req, file, cb) => {
