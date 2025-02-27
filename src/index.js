@@ -22,8 +22,14 @@ const io = socket.init(server); // Initialize Socket.IO
 app.use("/profile", express.static(path.join(__dirname, "../public/profile")));
 app.use("/lesson", express.static(path.join(__dirname, "../public/lesson")));
 app.use("/challenge", express.static(path.join(__dirname, "../public/challenge")));
-app.use("/certificate", express.static(path.join(__dirname, "../public/certificate")));
-app.use("/challenge_submissions", express.static(path.join(__dirname, "../public/challenge_submissions")));
+app.use("/certificate", express.static(path.join(__dirname, "../public/certificate"), {
+    setHeaders: (res) => {
+      res.setHeader("Access-Control-Allow-Origin", "*"); // Allow all origins (adjust for production)
+      res.setHeader("Access-Control-Allow-Methods", "GET, HEAD, OPTIONS");
+      res.setHeader("Access-Control-Allow-Headers", "Content-Type, Authorization");
+    }
+  }));
+  app.use("/challenge_submissions", express.static(path.join(__dirname, "../public/challenge_submissions")));
 app.use("/lesson_submissions", express.static(path.join(__dirname, "../public/lesson_submissions")));
 app.use("/presentation_submissions", express.static(path.join(__dirname, "../public/presentation_submissions")));
 app.use("/cover-class", express.static(path.join(__dirname, "../public/cover-class")));

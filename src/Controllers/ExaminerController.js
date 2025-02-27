@@ -30,6 +30,11 @@ router.get("/presentations/completions", async (req, res) => {
     const finalPresentations = await prisma.finalCompletion.findMany({
       where: whereClause,
       include: {
+        notes: {
+          select: {
+            content: true,
+          }
+        },
         user: {
           select: {
             id: true,

@@ -128,7 +128,7 @@ model Batch {
   presentation FinalPresentation[] @relation("FinalPresentation")
   certificates Certificate[]
   cover  BatchCover? @relation("BatchCover")
-
+  notes       Note[]      @relation("BatchesNotes")
 }
 
 model Class {
@@ -145,6 +145,7 @@ model Class {
   users       User[]      @relation("UserClasses")
   mentors     User[]      @relation("ClassMentors")
   cover  ClassCover? @relation("ClassCover")
+  notes       Note[]      @relation("ClassesNotes")
 }
 
 model ClassCover {
@@ -180,9 +181,9 @@ model Challenge {
   id          String @id @default(uuid())
   title       String   @db.VarChar(100)
   description String   @db.VarChar(300)
-  batch       Batch  @relation("BatchChallenges", fields: [batchId], references: [id])
+  batch       Batch  @relation("BatchChallenges", fields: [batchId], references: [id], onDelete: Cascade)
   batchId     String
-  class        Class  @relation("ClassChallenges" ,fields: [classId], references: [id])
+  class        Class  @relation("ClassChallenges" ,fields: [classId], references: [id], onDelete: Cascade)
   classId     String
   deadline    DateTime
   files       File[]
@@ -221,6 +222,10 @@ model Note {
   challengeCompletion   ChallengeCompletion?  @relation(fields: [challengeCompletionId], references: [id])
   finalCompletionId     String?               @unique
   finalCompletion       FinalCompletion?      @relation(fields: [finalCompletionId], references: [id])
+  classId               String?
+  class                 Class?                @relation("ClassesNotes", fields: [classId], references: [id])
+  batchId               String?
+  batch                 Batch?                @relation("BatchesNotes", fields: [batchId], references: [id])
   createdAt             DateTime              @default(now())
 }
 

@@ -971,5 +971,45 @@ router.post('/role/roles', async (req, res) => {
   }
 });
 
+router.delete("/batch/:batchId", async (req, res) => {
+  try {
+    const { batchId } = req.params;
+
+    // Check if the user is a mentor in this batch
+    const batch = await prismaClient.batch.findUnique({
+      where: { id: batchId },
+    });
+
+    if (!batch) {
+      return res.status(404).json({ message: "Batch not found" });
+    }
+
+    await prismaClient.batch.delete({ where: { id: batchId } });
+    res.status(200).json({ message: "Batch deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Error deleting batch", error });
+  }
+});
+
+// Delete a class by classId and userId
+router.delete("/class/:classId", async (req, res) => {
+  try {
+    const { classId } = req.params;
+
+    // Check if the user is a mentor in this class
+    const classItem = await prismaClient.class.findUnique({
+      where: { id: classId },
+    });
+
+    if (!classItem) {
+      return res.status(404).json({ message: "Class not found" });
+    }
+
+    await prismaClient.class.delete({ where: { id: classId } });
+    res.status(200).json({ message: "Class deleted successfully" });
+  } catch (error) {
+    res.status(500).json({ message: "Error deleting class", error });
+  }
+});
 
 module.exports = router;

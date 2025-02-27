@@ -377,15 +377,26 @@ const certificateStorage = multer.diskStorage({
 
 const certificateUpload = multer({
   storage: certificateStorage,
-  limits: { fileSize: 5 * 1024 * 1024 }, // Maximum 5 MB
+  limits: { fileSize: 100 * 1024 * 1024 }, // Maximum 100 MB per file
   fileFilter: (req, file, cb) => {
-    if (allowedMimeTypes.certificate.includes(file.mimetype)) {
+    const allowedMimeTypes = [
+      "application/pdf",
+      "image/jpeg",
+      "image/png",
+      "application/zip",
+    ];
+    if (allowedMimeTypes.includes(file.mimetype)) {
       cb(null, true);
     } else {
-      cb(new Error("Invalid file type. Only PDF, JPEG, and PNG are allowed."));
+      cb(
+        new Error(
+          "Invalid file type. Only JPEG, PNG, PDF, and PPTX are allowed."
+        )
+      );
     }
   },
 });
+
 
 router.post(
   "/certificate",

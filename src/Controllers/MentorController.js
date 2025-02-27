@@ -227,6 +227,77 @@ router.get('/note/trainee/:traineeId', protect, async (req, res) => {
     }
 });
 
+router.get("/note/notes", async (req, res) => {
+  try {
+    const { batchId, classId, lessonId, challengeId } = req.query;
+
+    const whereClause = {
+      ...(batchId && { batchId }), // Directly filter by batchId
+      ...(classId && { classId }), // Directly filter by classId
+      ...(lessonId && { lessonCompletion: { lesson: { id: lessonId } } }), // Filter by lessonId
+      ...(challengeId && { challengeCompletion: { challenge: { id: challengeId } } }) // Filter by challengeId
+    };
+
+    const notes = await prismaClient.note.findMany({
+      where: whereClause,
+      select: {
+        id: true,
+        content: true,
+        visibility: true,
+        grader: {
+          select: {
+            id: true,
+            fullName: true,
+          }
+        },
+        trainee: {
+          select: {
+            id: true,
+            fullName: true,
+          },
+        },
+        batch: {
+          select: {
+            id: true,
+            batchTitle: true,
+          }
+        },
+        class: {
+          select: {
+            id: true,
+            className: true,
+          }
+        },
+        lessonCompletion: {
+          select: {
+            id: true,
+            lesson: {
+              select: {
+                title: true,
+              }
+            }
+          }
+        },
+        challengeCompletion: {
+          select: {
+            id: true,
+            challenge: {
+              select: {
+                title: true,
+              }
+            }
+          }
+        }
+      },
+    });
+
+    res.status(200).json(notes);
+  } catch (error) {
+    console.error("Error fetching notes:", error);
+    res.status(500).json({ error: "Failed to fetch notes" });
+  }
+});
+
 //router to delete note
 router.delete('/notes/:noteId', protect, async (req, res) => {
   const { noteId } = req.params;
