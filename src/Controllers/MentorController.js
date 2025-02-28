@@ -8,7 +8,7 @@ const prismaClient = new prisma();
 
 //router to add note 
 router.post('/note/add', protect, async (req, res) => {
-  const { content, visibility, graderId, traineeId, classId } = req.body;
+  const { content, visibility, graderId, traineeId, classId, batchId } = req.body;
 
   // Validate content length
   if (!content || content.length > 300) {
@@ -23,6 +23,7 @@ router.post('/note/add', protect, async (req, res) => {
         graderId,
         traineeId,
         classId,
+        batchId,
       },
     });
 
@@ -46,21 +47,32 @@ router.post('/note/:lessonCompletionId/lesson', protect, async (req, res) => {
     const graderId = req.user.id;
     const lessonCompletion = await prismaClient.lessonCompletion.findUnique({
       where: { id: lessonCompletionId },
-      select: { userId: true }, // Only fetch the userId
+      select: { 
+        userId: true, 
+        lesson: {
+          select: {
+            batchId: true,
+            classId: true,
+          }
+        },
+         }, // Include batchId and classId
     });
 
     if (!lessonCompletion) {
       return res.status(404).json({ message: 'LessonCompletion not found' });
     }
 
-    const traineeId = lessonCompletion.userId;
+    const { userId: traineeId, lesson } = lessonCompletion;
+    const { batchId, classId } = lesson; // Extract from nested object
     const note = await prismaClient.note.create({
       data: {
         content,
         visibility,
         graderId,
         traineeId,
-        lessonCompletionId, 
+        lessonCompletionId,
+        batchId,
+        classId,
       },
     });
 
@@ -76,7 +88,6 @@ router.post('/note/:lessonCompletionId/lesson', protect, async (req, res) => {
   }
 });
 
-//router to add note based from challengecompletion id
 router.post('/note/:challengeCompletionId/challenge', protect, async (req, res) => {
   const { challengeCompletionId } = req.params;
   const { content, visibility } = req.body;
@@ -86,24 +97,35 @@ router.post('/note/:challengeCompletionId/challenge', protect, async (req, res) 
       return res.status(400).json({ message: 'Missing required fields' });
     }
 
-    const graderId = req.user.id; // Get graderId from middleware
+    const graderId = req.user.id;
     const challengeCompletion = await prismaClient.challengeCompletion.findUnique({
       where: { id: challengeCompletionId },
-      select: { userId: true }, 
+      select: { 
+        userId: true, 
+        challenge: {
+          select: {
+            batchId: true,
+            classId: true,
+          }
+        }, 
+      }, // Include batchId and classId
     });
 
     if (!challengeCompletion) {
       return res.status(404).json({ message: 'ChallengeCompletion not found' });
     }
 
-    const traineeId = challengeCompletion.userId;
+    const { userId: traineeId, challenge } = challengeCompletion;
+    const { batchId, classId } = challenge; // Extract from nested object
     const note = await prismaClient.note.create({
       data: {
         content,
         visibility,
         graderId,
         traineeId,
-        challengeCompletionId, // Link to ChallengeCompletion
+        challengeCompletionId,
+        batchId,
+        classId,
       },
     });
 
@@ -229,14 +251,22 @@ router.get('/note/trainee/:traineeId', protect, async (req, res) => {
 
 router.get("/note/notes", async (req, res) => {
   try {
-    const { batchId, classId, lessonId, challengeId } = req.query;
+    const { batchId, classId, lessonId, challengeId, page } = req.query;
+
+    const pageSize = 5; // Fixed 5 notes per page
+    const currentPage = parseInt(page, 10) || 1;
+    const skip = (currentPage - 1) * pageSize;
 
     const whereClause = {
-      ...(batchId && { batchId }), // Directly filter by batchId
-      ...(classId && { classId }), // Directly filter by classId
-      ...(lessonId && { lessonCompletion: { lesson: { id: lessonId } } }), // Filter by lessonId
-      ...(challengeId && { challengeCompletion: { challenge: { id: challengeId } } }) // Filter by challengeId
+      ...(batchId && { batchId }),
+      ...(classId && { classId }),
+      ...(lessonId && { lessonCompletion: { lesson: { id: lessonId } } }),
+      ...(challengeId && { challengeCompletion: { challenge: { id: challengeId } } })
     };
+
+    // Count total notes for pagination
+    const totalNotes = await prismaClient.note.count({ where: whereClause });
+    const totalPages = Math.ceil(totalNotes / pageSize); // Calculate total pages
 
     const notes = await prismaClient.note.findMany({
       where: whereClause,
@@ -273,6 +303,18 @@ router.get("/note/notes", async (req, res) => {
             id: true,
             lesson: {
               select: {
+                class: {
+                  select: {
+                    id: true,
+                    className: true,
+                  }
+                },
+                batch: {
+                  select: {
+                    id: true,
+                    batchTitle: true,
+                  }
+                },
                 title: true,
               }
             }
@@ -283,15 +325,29 @@ router.get("/note/notes", async (req, res) => {
             id: true,
             challenge: {
               select: {
+                class: {
+                  select: {
+                    id: true,
+                    className: true,
+                  }
+                },
+                batch: {
+                  select: {
+                    id: true,
+                    batchTitle: true,
+                  }
+                },
                 title: true,
               }
             }
           }
         }
       },
+      skip,
+      take: pageSize, // Fixed 5 notes per request
     });
 
-    res.status(200).json(notes);
+    res.status(200).json({ notes, currentPage, totalPages, pageSize });
   } catch (error) {
     console.error("Error fetching notes:", error);
     res.status(500).json({ error: "Failed to fetch notes" });
