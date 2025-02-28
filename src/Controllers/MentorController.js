@@ -103,7 +103,7 @@ router.post('/note/:challengeCompletionId/challenge', protect, async (req, res) 
       select: { 
         userId: true, 
         challenge: {
-          select: {
+          select: { 
             batchId: true,
             classId: true,
           }
@@ -270,10 +270,12 @@ router.get("/note/notes", async (req, res) => {
 
     const notes = await prismaClient.note.findMany({
       where: whereClause,
+      orderBy: { createdAt: "desc" }, // Sort from newest to oldest
       select: {
         id: true,
         content: true,
         visibility: true,
+        createdAt: true, // Include createdAt for reference
         grader: {
           select: {
             id: true,
@@ -303,18 +305,6 @@ router.get("/note/notes", async (req, res) => {
             id: true,
             lesson: {
               select: {
-                class: {
-                  select: {
-                    id: true,
-                    className: true,
-                  }
-                },
-                batch: {
-                  select: {
-                    id: true,
-                    batchTitle: true,
-                  }
-                },
                 title: true,
               }
             }
@@ -325,18 +315,6 @@ router.get("/note/notes", async (req, res) => {
             id: true,
             challenge: {
               select: {
-                class: {
-                  select: {
-                    id: true,
-                    className: true,
-                  }
-                },
-                batch: {
-                  select: {
-                    id: true,
-                    batchTitle: true,
-                  }
-                },
                 title: true,
               }
             }

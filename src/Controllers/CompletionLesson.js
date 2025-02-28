@@ -97,24 +97,33 @@ router.post(
     const { files } = req;
 
     if (!userId || !lessonId) {
-      return res
-        .status(400)
-        .json({ error: "userId and lessonId are required." });
+      return res.status(400).json({ error: "userId and lessonId are required." });
     }
 
     try {
+      // Fetch the lesson details including mentor and deadline
       const lesson = await prisma.lesson.findUnique({
-        where: {id: lessonId},
-        select: {mentorId: true,}
-      })
+        where: { id: lessonId },
+        select: { mentorId: true, deadline: true },
+      });
 
       if (!lesson || !lesson.mentorId) {
-        return res.status(404).json({ error: "Mentor not found" });
+        return res.status(404).json({ error: "Lesson or Mentor not found" });
       }
 
       const mentorId = lesson.mentorId;
 
-      // Upsert lessonCompletion and explicitly select the ID
+      // Get the current time and lesson deadline
+      const currentDate = new Date();
+      const deadlineDate = lesson.deadline ? new Date(lesson.deadline) : null;
+
+      console.log("📅 Current DateTime:", currentDate.toISOString());
+      console.log("📌 Lesson Deadline DateTime:", deadlineDate ? deadlineDate.toISOString() : "No deadline set");
+
+      // Determine the submission status
+      const status = deadlineDate && currentDate > deadlineDate ? "LATE" : "SUBMITTED";
+
+      // Upsert lessonCompletion
       const lessonCompletion = await prisma.lessonCompletion.upsert({
         where: {
           userId_lessonId: {
@@ -122,43 +131,32 @@ router.post(
             lessonId,
           },
         },
-        select: {
-          id: true, // Explicitly select the ID
-          lesson: {
-            select: {
-              mentor: true,
-            },
-          },
-        },
+        select: { id: true },
         update: {
           completed: true,
-          completedAt: new Date(),
-          status: "SUBMITTED",
+          completedAt: currentDate,
+          status,
         },
         create: {
           userId,
           lessonId,
           completed: true,
-          completedAt: new Date(),
-          status: "SUBMITTED",
+          completedAt: currentDate,
+          status,
         },
       });
 
       // If files are uploaded, save them in the File model
       if (files && files.length > 0) {
-        // Map the files and associate them with the LessonCompletion entry
         const uploadedFiles = files.map((file) => ({
           filename: sanitizeFilename(file.originalname),
           filepath: file.path,
           mimetype: file.mimetype,
           size: file.size,
-          lesCompletionId: lessonCompletion.id, // Associate with LessonCompletion
+          lesCompletionId: lessonCompletion.id,
         }));
 
-        // Save the files in the File table
-        await prisma.file.createMany({
-          data: uploadedFiles,
-        });
+        await prisma.file.createMany({ data: uploadedFiles });
       }
 
       // Calculate progress
@@ -178,38 +176,41 @@ router.post(
         ? `Lesson completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate was issued!`
         : `Lesson completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges.`;
 
-        const notifyMentor = async (mentorId) => {
-          const mentorNotification = await prisma.notification.create({
-            data: {
-              userId: mentorId,
-              title: "Student Submission",
-              description: `A student just submitted their Lesson.`,
-              type: "Challenge",
-            },
-          });
-  
-          // Emit notification to mentor if they're online
-          const io = socket.getIO();
-          io.to(mentorId).emit("receiveNotification", {
-            id: mentorNotification.id,
-            title: mentorNotification.title,
-            description: mentorNotification.description,
-            type: mentorNotification.type,
-            createdAt: mentorNotification.createdAt,
-          });
-  
-          console.log(`📢 Notification sent to mentor ${mentorId}`);
-        };
-  
-        await notifyMentor(mentorId);
+      // Notify Mentor
+      const notifyMentor = async (mentorId) => {
+        const mentorNotification = await prisma.notification.create({
+          data: {
+            userId: mentorId,
+            title: "Student Submission",
+            description: `A student just submitted their Lesson. Status: ${status}`,
+            type: "Lesson",
+          },
+        });
+
+        // Emit notification to mentor
+        const io = socket.getIO();
+        io.to(mentorId).emit("receiveNotification", {
+          id: mentorNotification.id,
+          title: mentorNotification.title,
+          description: mentorNotification.description,
+          type: mentorNotification.type,
+          createdAt: mentorNotification.createdAt,
+        });
+
+        console.log(`📢 Notification sent to mentor ${mentorId}`);
+      };
+
+      await notifyMentor(mentorId);
+
       // Return response
       res.status(200).json({
         message,
         files,
         certificate,
+        status,
       });
     } catch (error) {
-      console.error("Error completing lesson:", error);
+      console.error("❌ Error completing lesson:", error);
       res.status(500).json({ error: error.message });
     }
   }
@@ -224,53 +225,30 @@ router.post(
     const { files } = req;
 
     if (!userId || !challengeId) {
-      return res
-        .status(400)
-        .json({ error: "userId and challengeId are required" });
+      return res.status(400).json({ error: "userId and challengeId are required" });
     }
 
     try {
-      // 🟢 1. Get mentorId from the Challenge model
+      // 🟢 1. Get mentorId and deadline from the Challenge model
       const challenge = await prisma.challenge.findUnique({
         where: { id: challengeId },
-        select: { mentorId: true }, // Assuming your Challenge model has mentorId
+        select: { mentorId: true, deadline: true }, // Fetch mentorId and deadline
       });
 
       if (!challenge || !challenge.mentorId) {
         return res.status(404).json({ error: "Mentor not found." });
       }
 
-      const mentorId = challenge.mentorId;
+      const { mentorId, deadline } = challenge;
 
-      // 🟢 2. Check if the challenge is already completed
-      const existingCompletion = await prisma.challengeCompletion.findUnique({
-        where: {
-          userId_challengeId: {
-            userId,
-            challengeId,
-          },
-        },
-      });
+      // 🟢 2. Determine submission status based on the deadline
+      const currentDate = new Date();
+      const deadlineDate = deadline ? new Date(deadline) : null;
 
-      if (existingCompletion && existingCompletion.completed) {
-        await prisma.challengeCompletion.update({
-          where: {
-            userId_challengeId: {
-              userId,
-              challengeId,
-            },
-          },
-          data: {
-            status: "SUBMITTED",
-          },
-        });
+      console.log("📅 Current DateTime:", currentDate.toISOString());
+      console.log("📌 Challenge Deadline DateTime:", deadlineDate ? deadlineDate.toISOString() : "No deadline set");
 
-        await notifyMentor(mentorId); // 🔑 Notify the mentor based on mentorId
-
-        return res
-          .status(200)
-          .json({ message: "Challenge has been submitted successfully." });
-      }
+      const status = deadlineDate && currentDate > deadlineDate ? "LATE" : "SUBMITTED";
 
       // 🟢 3. Upsert challenge completion
       const challengeCompletion = await prisma.challengeCompletion.upsert({
@@ -282,15 +260,15 @@ router.post(
         },
         update: {
           completed: true,
-          completedAt: new Date(),
-          status: "SUBMITTED",
+          completedAt: currentDate,
+          status,
         },
         create: {
           userId,
           challengeId,
           completed: true,
-          completedAt: new Date(),
-          status: "SUBMITTED",
+          completedAt: currentDate,
+          status,
         },
       });
 
@@ -304,9 +282,7 @@ router.post(
           chCompletionId: challengeCompletion.id,
         }));
 
-        await prisma.file.createMany({
-          data: uploadedFiles,
-        });
+        await prisma.file.createMany({ data: uploadedFiles });
       }
 
       // 🟢 5. Calculate progress and issue certificate
@@ -323,13 +299,13 @@ router.post(
         ? `Challenge completed successfully. You finished ${completedLessons} out of ${totalLessons} lessons and ${completedChallenges} out of ${totalChallenges} challenges, and a certificate was issued!`
         : `Challenge completed successfully. You finished ${completedChallenges} out of ${totalChallenges} challenges.`;
 
-      // 🟢 6. Notify mentor based on challenge.mentorId
+      // 🟢 6. Notify mentor about submission status
       const notifyMentor = async (mentorId) => {
         const mentorNotification = await prisma.notification.create({
           data: {
             userId: mentorId,
             title: "Student Submission",
-            description: `A student just submitted their challenge.`,
+            description: `A student just submitted their challenge. Status: ${status}`,
             type: "Challenge",
           },
         });
@@ -353,6 +329,7 @@ router.post(
         message,
         files,
         certificate,
+        status,
       });
     } catch (error) {
       console.error("❌ Error completing challenge:", error);
@@ -369,7 +346,7 @@ router.get("/lesson/:lessonId/:userId/status", async (req, res) => {
   }
 
   try {
-    // Use `findUnique` to get a specific LessonCompletion based on lessonId and userId
+    // Check for lessonCompletion
     const lessonCompletion = await prisma.lessonCompletion.findUnique({
       where: {
         userId_lessonId: {
@@ -384,11 +361,25 @@ router.get("/lesson/:lessonId/:userId/status", async (req, res) => {
       },
     });
 
-    if (!lessonCompletion) {
-      return res.status(404).json({ error: "Lesson completion not found" });
+    if (lessonCompletion) {
+      return res.status(200).json(lessonCompletion);
     }
 
-    res.status(200).json(lessonCompletion);
+    // If no lessonCompletion, fetch lesson status
+    const lesson = await prisma.lesson.findUnique({
+      where: { id: lessonId },
+      select: { status: true },
+    });
+
+    if (!lesson) {
+      return res.status(404).json({ error: "Lesson not found" });
+    }
+
+    res.status(200).json({
+      status: lesson.status,
+      submissionFiles: [],
+      notes: [],
+    });
   } catch (error) {
     console.error("Error fetching lesson status:", error);
     res.status(500).json({ error: error.message });
@@ -398,12 +389,13 @@ router.get("/lesson/:lessonId/:userId/status", async (req, res) => {
 router.get("/challenge/:challengeId/:userId/status", async (req, res) => {
   const { challengeId, userId } = req.params;
 
-  if (!challengeId) {
-    return res.status(400).json({ error: "challengeId is required" });
+  if (!challengeId || !userId) {
+    return res.status(400).json({ error: "challengeId and userId are required" });
   }
 
   try {
-    const challenge = await prisma.challengeCompletion.findUnique({
+    // Check for challengeCompletion
+    const challengeCompletion = await prisma.challengeCompletion.findUnique({
       where: {
         userId_challengeId: {
           userId,
@@ -417,26 +409,42 @@ router.get("/challenge/:challengeId/:userId/status", async (req, res) => {
       },
     });
 
-    if (!challenge) {
-      return res.status(404).json({ error: "challenge not found" });
+    if (challengeCompletion) {
+      return res.status(200).json(challengeCompletion);
     }
 
-    res.status(200).json(challenge);
+    // If no challengeCompletion, fetch challenge status
+    const challenge = await prisma.challenge.findUnique({
+      where: { id: challengeId },
+      select: { status: true },
+    });
+
+    if (!challenge) {
+      return res.status(404).json({ error: "Challenge not found" });
+    }
+
+    res.status(200).json({
+      status: challenge.status,
+      submissionFiles: [],
+      notes: [],
+    });
   } catch (error) {
     console.error("Error fetching challenge status:", error);
     res.status(500).json({ error: error.message });
   }
 });
 
+
 router.get("/presentation/:presentationId/:userId/status", async (req, res) => {
   const { presentationId, userId } = req.params;
 
-  if (!presentationId) {
-    return res.status(400).json({ error: "presentationId is required" });
+  if (!presentationId || !userId) {
+    return res.status(400).json({ error: "presentationId and userId are required" });
   }
 
   try {
-    const presentation = await prisma.finalCompletion.findUnique({
+    // Check for finalCompletion
+    const finalCompletion = await prisma.finalCompletion.findUnique({
       where: {
         userId_presentationId: {
           userId,
@@ -450,11 +458,25 @@ router.get("/presentation/:presentationId/:userId/status", async (req, res) => {
       },
     });
 
-    if (!presentation) {
-      return res.status(404).json({ error: "presentation not found" });
+    if (finalCompletion) {
+      return res.status(200).json(finalCompletion);
     }
 
-    res.status(200).json(presentation);
+    // If no finalCompletion, fetch presentation status
+    const presentation = await prisma.finalPresentation.findUnique({
+      where: { id: presentationId },
+      select: { status: true },
+    });
+
+    if (!presentation) {
+      return res.status(404).json({ error: "Presentation not found" });
+    }
+
+    res.status(200).json({
+      status: presentation.status,
+      submissionFiles: [],
+      notes: [],
+    });
   } catch (error) {
     console.error("Error fetching presentation status:", error);
     res.status(500).json({ error: error.message });
@@ -626,6 +648,25 @@ router.post(
     }
 
     try {
+      // Fetch the presentation deadline (including time)
+      const presentation = await prisma.presentation.findUnique({
+        where: { id: presentationId },
+        select: { deadline: true },
+      });
+
+      if (!presentation || !presentation.deadline) {
+        return res.status(404).json({ error: "Presentation not found or has no deadline." });
+      }
+
+      const currentDate = new Date();
+      const deadlineDate = new Date(presentation.deadline);
+
+      console.log("📅 Current DateTime:", currentDate.toISOString());
+      console.log("📌 Deadline DateTime:", deadlineDate.toISOString());
+
+      // Determine status based on exact date & time
+      const status = currentDate > deadlineDate ? "LATE" : "SUBMITTED";
+
       // Find all examiners
       const examiners = await prisma.user.findMany({
         where: { role: "EXAMINER" },
@@ -647,15 +688,15 @@ router.post(
         select: { id: true },
         update: {
           completed: true,
-          completedAt: new Date(),
-          status: "SUBMITTED",
+          completedAt: currentDate,
+          status,
         },
         create: {
           userId,
           presentationId,
           completed: true,
-          completedAt: new Date(),
-          status: "SUBMITTED",
+          completedAt: currentDate,
+          status,
         },
       });
 
@@ -678,7 +719,7 @@ router.post(
           data: {
             userId: examiner.id,
             title: "Student Submission",
-            description: "A student just submitted their final presentation.",
+            description: `A student just submitted their final presentation. Status: ${status}`,
             type: "Presentation",
           },
         });
@@ -696,13 +737,12 @@ router.post(
         console.log(`📢 Notification sent to examiner ${examiner.id}`);
       }
 
-      res.status(200).json({ files });
+      res.status(200).json({ files, status });
     } catch (error) {
-      console.error("Error completing presentation:", error);
+      console.error("❌ Error completing presentation:", error);
       res.status(500).json({ error: error.message });
     }
   }
 );
   
-
 module.exports = router;
